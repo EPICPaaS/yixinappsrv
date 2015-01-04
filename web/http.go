@@ -39,8 +39,11 @@ func StartHTTP() {
 	appAppServeMux.Handle("/app/static/", http.StripPrefix("/app/static/", http.FileServer(http.Dir("static"))))
 
 	appAppServeMux.HandleFunc("/app/client/device/login", apiCallStat(app.Device.Login))
+	appAppServeMux.HandleFunc("/app/client/device/addOrRemoveContact", app.Device.AddOrRemoveContact)
 	appAppServeMux.HandleFunc("/app/client/device/getMember", app.Device.GetMemberByUserName)
 	appAppServeMux.HandleFunc("/app/client/device/getOrgInfo", app.Device.GetOrgInfo)
+	appAppServeMux.HandleFunc("/app/client/device/getOrgUserList", app.Device.GetOrgUserList)
+	appAppServeMux.HandleFunc("/app/client/device/checkUpdate", app.Device.CheckUpdate)
 	appAppServeMux.HandleFunc("/app/client/device/search", app.Device.SearchUser)
 	appAppServeMux.HandleFunc("/app/client/device/addApnsToken", app.Device.AddApnsToken)
 	appAppServeMux.HandleFunc("/app/client/device/delApnsToken", app.Device.DelApnsToken)
@@ -60,6 +63,8 @@ func StartHTTP() {
 	appAppServeMux.HandleFunc("/app/client/app/getOrgList", app.App.GetOrgList)
 	appAppServeMux.HandleFunc("/app/client/app/addOrgUser", app.App.AddOrgUser)
 	appAppServeMux.HandleFunc("/app/client/app/removeOrgUser", app.App.RemoveOrgUser)
+
+	appAppServeMux.HandleFunc("/app/user/erweima", app.UserErWeiMa)
 
 	for _, bind := range app.Conf.AppBind {
 		logger.Infof("start app http listen addr:\"%s\"", bind)
