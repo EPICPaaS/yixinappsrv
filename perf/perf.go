@@ -14,22 +14,30 @@
 // You should have received a copy of the GNU General Public License
 // along with gopush-cluster.  If not, see <http://www.gnu.org/licenses/>.
 
-package rpc
+package perf
 
 import (
-	"errors"
+	"github.com/b3log/wide/log"
+	"net/http"
+	"net/http/pprof"
+	"os"
 )
 
-const (
-	// common
-	// ok
-	OK = 0
-	// param error
-	ParamErr = 65534
-	// internal error
-	InternalErr = 65535
-)
+var logger = log.NewLogger(os.Stdout)
 
-var (
-	ErrParam = errors.New("parameter error")
-)
+// StartPprof start http pprof.
+func Init(pprofBind []string) {
+	pprofServeMux := http.NewServeMux()
+	pprofServeMux.HandleFunc("/debug/pprof/", pprof.Index)
+	pprofServeMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	pprofServeMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	pprofServeMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	for _, addr := range pprofBind {
+		go func() {
+			if err := http.ListenAndServe(addr, pprofServeMux); err != nil {
+				logger.Errorf("http.ListenAndServe(\"%s\", pprofServeMux) error(%v)", addr, err)
+				panic(err)
+			}
+		}()
+	}
+}

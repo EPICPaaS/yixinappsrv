@@ -14,36 +14,16 @@
 // You should have received a copy of the GNU General Public License
 // along with gopush-cluster.  If not, see <http://www.gnu.org/licenses/>.
 
-package main
+package process
 
 import (
-	"fmt"
-	"github.com/EPICPaaS/yixinappsrv/app"
-	"github.com/EPICPaaS/yixinappsrv/router"
+	"testing"
 )
 
-const (
-	NetworkRouterCN = "CN" // china
-)
-
-var (
-	routerCN *router.RouterCN
-)
-
-// Init network router
-func InitRouter() error {
-	switch app.Conf.Router {
-	case NetworkRouterCN:
-		r, err := router.InitCN(app.Conf.QQWryPath)
-		if err != nil {
-			logger.Errorf("init china network router failed(%v)", err)
-			return err
-		}
-		routerCN = r
-	default:
-		// TODO:support more countries` network routers
-		return fmt.Errorf("unknown network router:\"%s\", please check your configuration", app.Conf.Router)
+// mkdir -p /tmp/test && chown -R nobody:nobody /tmp/test
+// sudo go test
+func TestInit(t *testing.T) {
+	if err := Init("nobody nobody", "./", "/tmp/test/process_test.pid"); err != nil {
+		t.Error(err)
 	}
-
-	return nil
 }

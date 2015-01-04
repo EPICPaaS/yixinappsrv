@@ -18,7 +18,10 @@ package main
 
 import (
 	"flag"
+	"github.com/EPICPaaS/yixinappsrv/app"
 	"github.com/EPICPaaS/yixinappsrv/db"
+	"github.com/EPICPaaS/yixinappsrv/perf"
+	"github.com/EPICPaaS/yixinappsrv/process"
 	"github.com/b3log/wide/log"
 	"os"
 	"runtime"
@@ -34,7 +37,7 @@ func main() {
 	flag.Parse()
 	log.SetLevel(*logLevel)
 
-	logger.Infof("web ver: \"%s\" start", ver.Version)
+	logger.Infof("yixinappsrv-web ver: \"%s\" start", "1.0.0")
 
 	if err = app.InitConfig(); err != nil {
 		logger.Errorf("InitConfig() error(%v)", err)
@@ -47,23 +50,9 @@ func main() {
 	}
 	// Set max routine
 	runtime.GOMAXPROCS(app.Conf.MaxProc)
-	// init zookeeper
-	zkConn, err := InitZK()
-	if err != nil {
-		logger.Errorf("InitZookeeper() error(%v)", err)
-		return
-	}
-	// if process exit, close zk
-	defer zkConn.Close()
+
 	// start pprof http
 	perf.Init(app.Conf.PprofBind)
-	// Init network router
-	if app.Conf.Router != "" {
-		if err := InitRouter(); err != nil {
-			logger.Errorf("InitRouter() failed(%v)", err)
-			return
-		}
-	}
 
 	db.InitDB()
 	defer db.CloseDB()

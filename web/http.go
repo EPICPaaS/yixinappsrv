@@ -61,16 +61,6 @@ func StartHTTP() {
 	appAppServeMux.HandleFunc("/app/client/app/addOrgUser", app.App.AddOrgUser)
 	appAppServeMux.HandleFunc("/app/client/app/removeOrgUser", app.App.RemoveOrgUser)
 
-	for _, bind := range app.Conf.HttpBind {
-		logger.Infof("start http listen addr:\"%s\"", bind)
-		go httpListen(httpServeMux, bind)
-	}
-
-	for _, bind := range app.Conf.AdminBind {
-		logger.Infof("start admin http listen addr:\"%s\"", bind)
-		go httpListen(httpAdminServeMux, bind)
-	}
-
 	for _, bind := range app.Conf.AppBind {
 		logger.Infof("start app http listen addr:\"%s\"", bind)
 		go httpListen(appAppServeMux, bind)
