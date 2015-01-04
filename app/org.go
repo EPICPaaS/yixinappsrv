@@ -11,8 +11,6 @@ import (
 	"strings"
 	"text/template"
 	"time"
-	//"github.com/EPICPaaS/yixinappsrv/session"
-	"fmt"
 )
 
 /*成员结构体*/

@@ -1,13 +1,10 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"github.com/EPICPaaS/go-uuid/uuid"
 	"github.com/EPICPaaS/yixinappsrv/ketama"
 	"github.com/garyburd/redigo/redis"
-	"io/ioutil"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"

@@ -2,7 +2,7 @@ package session
 
 import (
 	"database/sql"
-	"github.com/EPICPaaS/appmsgsrv/db"
+	"github.com/EPICPaaS/yixinappsrv/db"
 	"github.com/b3log/wide/log"
 	"os"
 	"strings"
