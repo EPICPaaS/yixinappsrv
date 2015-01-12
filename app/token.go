@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"github.com/EPICPaaS/go-uuid/uuid"
 	"github.com/EPICPaaS/yixinappsrv/ketama"
 	"github.com/garyburd/redigo/redis"
 	"strconv"
@@ -144,6 +145,9 @@ func genToken(uid, sessionId string) (string, error) {
 
 	confExpire := int64(Conf.TokenExpire)
 	expire := confExpire + time.Now().Unix()
+	if len(sessionId) == 0 {
+		sessionId = uuid.New()
+	}
 	token := uid + "_" + sessionId
 
 	// 使用 Redis Hash 结构保存用户令牌值
