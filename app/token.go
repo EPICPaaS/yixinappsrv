@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"github.com/EPICPaaS/go-uuid/uuid"
 	"github.com/EPICPaaS/yixinappsrv/ketama"
 	"github.com/garyburd/redigo/redis"
 	"strconv"
@@ -134,7 +133,7 @@ func getUserByToken(token string) *member {
 }
 
 // 令牌生成.
-func genToken(user *member) (string, error) {
+func genToken(uid, sessionId string) (string, error) {
 	conn := rs.getConn("token")
 
 	if conn == nil {
@@ -145,7 +144,7 @@ func genToken(user *member) (string, error) {
 
 	confExpire := int64(Conf.TokenExpire)
 	expire := confExpire + time.Now().Unix()
-	token := user.Uid + "_" + uuid.New()
+	token := uid + "_" + sessionId
 
 	// 使用 Redis Hash 结构保存用户令牌值
 	if err := conn.Send("HSET", token, "expire", expire); err != nil {

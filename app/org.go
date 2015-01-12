@@ -62,7 +62,7 @@ type ExternalInterface struct {
 //  1. 根据指定的 tenantId 查询 customerId
 //  2. 在 external_interface 表中根据 customerId、type = 'login' 等信息查询接口地址
 //  3. 根据接口地址调用验证接口
-func loginAuth(username, password, customer_id string) (loginOk bool, user *member) {
+func loginAuth(username, password, customer_id string) (loginOk bool, user *member, sessionId string) {
 
 	// TODO: 旭东
 	EI := GetExtInterface(customer_id, "login")
@@ -70,9 +70,9 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 		if EI.Owner == 0 { //自己的登录
 			user = getUserByCode(username)
 			if user != nil && user.Password == password {
-				return true, user
+				return true, user, ""
 			} else {
-				return false, nil
+				return false, nil, ""
 			}
 		} else {
 			data := []byte(`{
@@ -83,20 +83,20 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 			res, err := http.Post(EI.HttpUrl, "text/plain;charset=UTF-8", body)
 			if err != nil {
 				logger.Error(err)
-				return false, nil
+				return false, nil, ""
 			}
 
 			resBodyByte, err := ioutil.ReadAll(res.Body)
 			defer res.Body.Close()
 			if err != nil {
 				logger.Error(err)
-				return false, nil
+				return false, nil, ""
 			}
 			var respBody map[string]interface{}
 
 			if err := json.Unmarshal(resBodyByte, &respBody); err != nil {
 				logger.Errorf("convert to json failed (%s)", err.Error())
-				return false, nil
+				return false, nil, ""
 			}
 			success, ok := respBody["success"].(bool)
 			if ok && success {
@@ -104,24 +104,24 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				userBody, err := json.Marshal(respBody["user"])
 				if err != nil {
 					logger.Errorf("convert to json failed (%s)", err.Error())
-					return false, nil
+					return false, nil, ""
 				}
 
 				if err := json.Unmarshal(userBody, &user); err != nil {
 					logger.Errorf("convert to json failed (%s)", err.Error())
-					return false, nil
+					return false, nil, ""
 				}
 
 				exists := isUserExists(user.Uid)
 				if exists {
 					//有则更新
 					if !updateMember(user) {
-						return false, nil
+						return false, nil, ""
 					}
 				} else {
 					//新增
 					if !addUser(user) {
-						return false, nil
+						return false, nil, ""
 					}
 				}
 
@@ -129,27 +129,28 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				tenantBody, err := json.Marshal(respBody["tenant"])
 				if err != nil {
 					logger.Errorf("convert to json failed (%s)", err.Error())
-					return false, nil
+					return false, nil, ""
 				}
+
 				var tenant Tenant
 				if err := json.Unmarshal(tenantBody, &tenant); err != nil {
 					logger.Errorf("convert to json failed (%s)", err.Error())
-					return false, nil
+					return false, nil, ""
 				}
 				tenant.CustomerId = customer_id
 				if !saveTennat(&tenant) {
 					logger.Error("登录设置tenant失败！")
-					return false, nil
+					return false, nil, ""
 				}
-
+				sessionId = respBody["sessionId"].(string)
 				//登录成功
-				return true, user
+				return true, user, sessionId
 			} else {
-				return false, nil
+				return false, nil, ""
 			}
 		}
 	}
-	return false, nil
+	return false, nil, ""
 }
 
 /*根据userId获取成员信息*/
@@ -337,7 +338,7 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 	logger.Tracef("uid [%s], deviceId [%s], deviceType [%s], userName [%s], password [%s]",
 		uid, deviceId, deviceType, userName, password)
 
-	loginOK, member := loginAuth(userName, password, customer_id)
+	loginOK, member, sessionId := loginAuth(userName, password, customer_id)
 	if !loginOK {
 		baseRes.ErrMsg = "auth failed"
 		baseRes.Ret = LoginErr
@@ -373,7 +374,7 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 
 	res["uid"] = member.Uid
 
-	token, err := genToken(member)
+	token, err := genToken(member.Uid, sessionId)
 	if nil != err {
 		logger.Error(err)
 
@@ -384,6 +385,7 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res["token"] = token
+	member.Avatar = "http://" + Conf.WeedfsAddr + "/4/" + member.Avatar
 	res["member"] = member
 }
 

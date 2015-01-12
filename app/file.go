@@ -6,6 +6,7 @@ import (
 	"github.com/EPICPaaS/yixinappsrv/db"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -15,6 +16,7 @@ const (
 	UPDATE_FILELINK_TIME   = "update file_link set updated =? where sender_id =? and file_id =?"
 	EXIST_FILELINK         = "select id from file_link where sender_id =? and file_id =?"
 	SELECT_EXPIRE_FILELINK = "select  id, file_id from file_link where  updated  < ?"
+	UPDATE_USER_AVATAR     = "update user set avatar = ? where id = ?"
 )
 
 type FileLink struct {
@@ -155,4 +157,131 @@ func ScanExpireFileLink() {
 		}
 	}
 
+}
+
+/*获取用户头像，直接返回头像流*/
+func (*device) GetUserAvatar(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != "POST" {
+		http.Error(w, "Method Not Allowed", 405)
+		return
+	}
+
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.Write([]byte("server error"))
+		logger.Errorf("ioutil.ReadAll() failed (%s)", err.Error())
+		return
+	}
+
+	var args map[string]interface{}
+
+	if err := json.Unmarshal(bodyBytes, &args); err != nil {
+		logger.Error(err)
+		w.Write([]byte("server error"))
+		return
+	}
+
+	baseReq := args["baseRequest"].(map[string]interface{})
+	// Token 校验
+	token := baseReq["token"].(string)
+	user := getUserByToken(token)
+	if nil == user {
+		w.Write([]byte("auth failure "))
+		return
+	}
+
+	width := int(args["width"].(float64))
+	height := int(args["height"].(float64))
+	if len(user.Avatar) == 0 {
+		w.Write([]byte("not avatar"))
+		return
+	}
+
+	addr := "http://" + Conf.WeedfsAddr + "/4/" + user.Avatar + "?width=" + strconv.Itoa(width) + "&height=" + strconv.Itoa(height)
+
+	resp, err := http.Get(addr)
+	if err != nil {
+		logger.Error(err)
+		w.Write([]byte("not find image"))
+		return
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logger.Errorf("ioutil.ReadAll() failed (%s)", err)
+		w.Write([]byte("server error"))
+		return
+	}
+
+	w.Write(body)
+}
+
+/*保存用户头像信息*/
+func (*device) SetUserAvatar(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != "POST" {
+		http.Error(w, "Method Not Allowed", 405)
+		return
+	}
+	baseRes := baseResponse{OK, ""}
+	body := ""
+	res := map[string]interface{}{"baseResponse": &baseRes}
+	defer RetPWriteJSON(w, r, res, &body, time.Now())
+
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		res["ret"] = ParamErr
+		logger.Errorf("ioutil.ReadAll() failed (%s)", err.Error())
+		return
+	}
+	body = string(bodyBytes)
+
+	var args map[string]interface{}
+
+	if err := json.Unmarshal(bodyBytes, &args); err != nil {
+		baseRes.ErrMsg = err.Error()
+		baseRes.Ret = ParamErr
+		return
+	}
+
+	baseReq := args["baseRequest"].(map[string]interface{})
+	// Token 校验
+	token := baseReq["token"].(string)
+	user := getUserByToken(token)
+	if nil == user {
+		baseRes.Ret = AuthErr
+		baseRes.ErrMsg = "Auth failure "
+		return
+	}
+
+	fileId := args["fileId"].(string)
+	fileSuffix := args["fileSuffix"].(string)
+	if !UpdateUserAvatar(user.Uid, fileId+"/"+fileSuffix) {
+		baseRes.Ret = InternalErr
+		return
+	}
+
+}
+
+/*修改用户头像*/
+func UpdateUserAvatar(userid, avatar string) bool {
+	tx, err := db.MySQL.Begin()
+	if err != nil {
+		logger.Error(err)
+		return false
+	}
+	_, err = tx.Exec(UPDATE_USER_AVATAR, avatar, userid)
+	if err != nil {
+		logger.Error(err)
+		if err := tx.Rollback(); err != nil {
+			logger.Error(err)
+		}
+		return false
+	}
+	//提交操作
+	if err := tx.Commit(); err != nil {
+		logger.Error(err)
+		return false
+	}
+	return true
 }
