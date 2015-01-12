@@ -294,6 +294,8 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 		toUser.StarFriend = 1
 	}
 
+	toUser.Avatar = strings.Replace(toUser.Avatar, ",", "/", 1)
+	toUser.Avatar = "http://" + Conf.WeedfsAddr + "/" + toUser.Avatar
 	res["member"] = toUser
 }
 
@@ -385,7 +387,8 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res["token"] = token
-	member.Avatar = "http://" + Conf.WeedfsAddr + "/4/" + member.Avatar
+	member.Avatar = strings.Replace(member.Avatar, ",", "/", 1)
+	member.Avatar = "http://" + Conf.WeedfsAddr + "/" + member.Avatar
 	res["member"] = member
 }
 
@@ -475,6 +478,8 @@ func getUserListByOrgId(id string) members {
 			logger.Error(err)
 		}
 		rec.UserName = rec.Uid + USER_SUFFIX
+		rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+		rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
 		ret = append(ret, rec)
 	}
 	return ret
@@ -1523,6 +1528,8 @@ func getStarUser(userId string) members {
 		}
 
 		rec.UserName = rec.Uid + USER_SUFFIX
+		rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+		rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
 		ret = append(ret, &rec)
 	}
 
@@ -1560,6 +1567,8 @@ func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
 		}
 
 		rec.UserName = rec.Uid + USER_SUFFIX
+		rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+		rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
 		ret = append(ret, &rec)
 	}
 
@@ -1798,4 +1807,62 @@ func GetExtInterface(customer_id, Type string) *ExternalInterface {
 		return ei
 	}
 	return nil
+}
+
+/*用户修改用户信息；用户只能修改自己的用户信息*/
+func SetUserInfo(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != "POST" {
+		http.Error(w, "Method Not Allowed", 405)
+		return
+	}
+	baseRes := baseResponse{OK, ""}
+	body := ""
+	res := map[string]interface{}{"baseResponse": baseRes}
+	defer RetPWriteJSON(w, r, res, &body, time.Now())
+
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		res["ret"] = ParamErr
+		logger.Errorf("ioutil.ReadAll() failed (%s)", err.Error())
+		return
+	}
+
+	body = string(bodyBytes)
+
+	var args map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &args); err != nil {
+		baseRes.ErrMsg = err.Error()
+		baseRes.Ret = ParamErr
+		return
+	}
+
+	baseReq := args["baseRequest"].(map[string]interface{})
+
+	// Token 校验
+	token := baseReq["token"].(string)
+	user := getUserByToken(token)
+	if nil == user {
+		baseRes.Ret = AuthErr
+		baseRes.ErrMsg = "会话超时请重新登录"
+		return
+	}
+
+	userStr, ok := args["user"]
+	if ok {
+		userInfoBody, err := json.Marshal(userStr)
+		if err != nil {
+			logger.Error(err)
+			baseRes.Ret = InternalErr
+			return
+		}
+		var userInfo member
+		if err := json.Unmarshal(userInfoBody, &userInfo); err != nil {
+			res["ret"] = ParamErr
+			logger.Errorf("ioutil.ReadAll() failed (%s)", err.Error())
+			return
+		}
+
+	}
+
 }

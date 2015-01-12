@@ -6,7 +6,6 @@ import (
 	"github.com/EPICPaaS/yixinappsrv/db"
 	"io/ioutil"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -162,44 +161,26 @@ func ScanExpireFileLink() {
 /*获取用户头像，直接返回头像流*/
 func (*device) GetUserAvatar(w http.ResponseWriter, r *http.Request) {
 
-	if r.Method != "POST" {
+	if r.Method != "GET" {
 		http.Error(w, "Method Not Allowed", 405)
 		return
 	}
 
-	bodyBytes, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		w.Write([]byte("server error"))
-		logger.Errorf("ioutil.ReadAll() failed (%s)", err.Error())
-		return
-	}
+	r.ParseForm()
+	userName := r.Form.Get("userName")
+	uid := userName[:strings.Index(userName, "@")]
 
-	var args map[string]interface{}
+	width := r.FormValue("width")
+	height := r.FormValue("height")
+	u := getUserByUid(uid)
 
-	if err := json.Unmarshal(bodyBytes, &args); err != nil {
-		logger.Error(err)
-		w.Write([]byte("server error"))
-		return
-	}
-
-	baseReq := args["baseRequest"].(map[string]interface{})
-	// Token 校验
-	token := baseReq["token"].(string)
-	user := getUserByToken(token)
-	if nil == user {
-		w.Write([]byte("auth failure "))
-		return
-	}
-
-	width := int(args["width"].(float64))
-	height := int(args["height"].(float64))
-	if len(user.Avatar) == 0 {
+	if nil != u && len(u.Avatar) == 0 {
 		w.Write([]byte("not avatar"))
 		return
 	}
 
-	addr := "http://" + Conf.WeedfsAddr + "/4/" + user.Avatar + "?width=" + strconv.Itoa(width) + "&height=" + strconv.Itoa(height)
-
+	u.Avatar = strings.Replace(u.Avatar, ",", "/", 1)
+	addr := "http://" + Conf.WeedfsAddr + "/" + u.Avatar + "?width=" + width + "&height=" + height
 	resp, err := http.Get(addr)
 	if err != nil {
 		logger.Error(err)
@@ -254,9 +235,10 @@ func (*device) SetUserAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fileId := args["fileId"].(string)
-	fileSuffix := args["fileSuffix"].(string)
-	if !UpdateUserAvatar(user.Uid, fileId+"/"+fileSuffix) {
+	responseUpload := args["responseUpload"].(map[string]interface{})
+	fileId := responseUpload["fid"].(string)
+	fileSuffix := args["fileExtention"].(string)
+	if !saveUserAvatar(user.Uid, fileId+"/."+fileSuffix) {
 		baseRes.Ret = InternalErr
 		return
 	}
@@ -264,7 +246,20 @@ func (*device) SetUserAvatar(w http.ResponseWriter, r *http.Request) {
 }
 
 /*修改用户头像*/
-func UpdateUserAvatar(userid, avatar string) bool {
+func saveUserAvatar(userid, avatar string) bool {
+
+	row := db.MySQL.QueryRow("select avatar from user where id = ?", userid)
+	var oldAvatar string
+	if err := row.Scan(&oldAvatar); err != nil {
+		logger.Error(err)
+	}
+
+	//没改变不需要修改
+	if avatar == oldAvatar {
+		return true
+	}
+
+	/*修改用户头像信息*/
 	tx, err := db.MySQL.Begin()
 	if err != nil {
 		logger.Error(err)
@@ -283,5 +278,14 @@ func UpdateUserAvatar(userid, avatar string) bool {
 		logger.Error(err)
 		return false
 	}
+
+	//删除旧头像文件
+	if len(oldAvatar) != 0 {
+		fileId := oldAvatar[:strings.Index(oldAvatar, "/")]
+		if !DeleteFile(fileId) {
+			logger.Errorf("delete file fail , file id is %s", fileId)
+		}
+	}
+
 	return true
 }
