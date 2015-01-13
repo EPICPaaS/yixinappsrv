@@ -14,7 +14,7 @@ const (
 	// 根据 id 查询应用记录.
 	SelectApplicationById = "SELECT  * FROM `application` WHERE `id` = ?"
 	// 查询应用记录.
-	SelectAllApplication = "SELECT `id`, `name`, `name`,`status`, `sort`,`avatar`, `tenant_id`, `name_py`, `name_quanpin` FROM `application`"
+	SelectAllApplication = "SELECT `id`, `name`, `name`,`status`, `sort`,`avatar`, `tenant_id`, `name_py`, `name_quanpin` ,`description` FROM `application`"
 	// 根据 token 获取应用记录.
 	SelectApplicationByToken = "SELECT * FROM `application` WHERE `token` = ?"
 	//根据应用ID查询应用操作项列表
@@ -77,7 +77,7 @@ func getAllApplication() ([]*member, error) {
 	for rows.Next() {
 		rec := member{}
 
-		if err := rows.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Sort, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin); err != nil {
+		if err := rows.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Sort, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Description); err != nil {
 			logger.Error(err)
 
 			return nil, err

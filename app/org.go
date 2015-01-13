@@ -35,7 +35,9 @@ type member struct {
 	TenantId    string    `json:"tenantId"`
 	Email       string    `json:"email"`
 	Mobile      string    `json:"mobile"`
+	Tel         string    `tel`
 	Area        string    `json:"area"`
+	Description string    `json:description`
 }
 type Tenant struct {
 	Id         string    `json:"id"`
@@ -174,7 +176,7 @@ func getUserByCode(code string) *member {
 /*根据传入的筛选列fieldName和参数fieldArg查询成员*/
 func getUserByField(fieldName, fieldArg string) *member {
 
-	sql := "select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin,password, mobile, area from user where " + fieldName + "=?"
+	sql := "select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin,password, mobile, tel ,area from user where " + fieldName + "=?"
 
 	smt, err := db.MySQL.Prepare(sql)
 	if smt != nil {
@@ -196,7 +198,7 @@ func getUserByField(fieldName, fieldArg string) *member {
 
 	for row.Next() {
 		rec := member{}
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Password, &rec.Mobile, &rec.Area)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Password, &rec.Mobile, &rec.Tel, &rec.Area)
 		if err != nil {
 			logger.Error(err)
 		}
@@ -421,7 +423,7 @@ func sortMemberList(lst []*member) {
 
 /*根据租户id（TenantId）获取成员*/
 func getUserListByTenantId(id string) members {
-	smt, err := db.MySQL.Prepare("select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin, mobile, area from user where tenant_id=?")
+	smt, err := db.MySQL.Prepare("select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin, mobile, tel, area from user where tenant_id=?")
 	if smt != nil {
 		defer smt.Close()
 	} else {
@@ -441,7 +443,7 @@ func getUserListByTenantId(id string) members {
 	ret := members{}
 	for row.Next() {
 		rec := new(member)
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Area)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area)
 		if err != nil {
 			logger.Error(err)
 		}
@@ -453,7 +455,7 @@ func getUserListByTenantId(id string) members {
 
 /*根据单位id（TenantId）获取成员*/
 func getUserListByOrgId(id string) members {
-	smt, err := db.MySQL.Prepare("select `user`.`id`, `user`.`name`, `user`.`nickname`, `user`.`status`, `user`.`avatar`, `user`.`tenant_id`, `user`.`name_py`, `user`.`name_quanpin`, `user`.`mobile`, `user`.`area`,`org_user`.`sort`	from `user`,`org_user` where `user`.`id`=`org_user`.`user_id` and org_id=?")
+	smt, err := db.MySQL.Prepare("select `user`.`id`, `user`.`name`, `user`.`nickname`, `user`.`status`, `user`.`avatar`, `user`.`tenant_id`, `user`.`name_py`, `user`.`name_quanpin`, `user`.`mobile`, `user`.`tel`, `user`.`area`,`org_user`.`sort`	from `user`,`org_user` where `user`.`id`=`org_user`.`user_id` and org_id=?")
 	if smt != nil {
 		defer smt.Close()
 	} else {
@@ -473,7 +475,7 @@ func getUserListByOrgId(id string) members {
 	ret := members{}
 	for row.Next() {
 		rec := new(member)
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Area, &rec.Sort)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area, &rec.Sort)
 		if err != nil {
 			logger.Error(err)
 		}
@@ -1500,7 +1502,7 @@ func (*device) SearchUser(w http.ResponseWriter, r *http.Request) {
 /*获取用户所有好友信息*/
 func getStarUser(userId string) members {
 	ret := members{}
-	sql := "select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin, mobile, area from user where id in (select to_user_id from user_user where from_user_id=?)"
+	sql := "select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin, mobile,tel, area from user where id in (select to_user_id from user_user where from_user_id=?)"
 
 	smt, err := db.MySQL.Prepare(sql)
 	if smt != nil {
@@ -1522,7 +1524,7 @@ func getStarUser(userId string) members {
 
 	for row.Next() {
 		rec := member{}
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Area)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area)
 		if err != nil {
 			logger.Error(err)
 		}
@@ -1539,7 +1541,7 @@ func getStarUser(userId string) members {
 /*通过name搜索用户，返回搜索结果（带分页），和结果条数*/
 func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
 	ret := members{}
-	sql := "select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin, mobile, area from user where tenant_id=? and nickname like ? limit ?, ?"
+	sql := "select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin, mobile, tel, area from user where tenant_id=? and nickname like ? limit ?, ?"
 
 	smt, err := db.MySQL.Prepare(sql)
 	if smt != nil {
@@ -1561,7 +1563,7 @@ func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
 
 	for row.Next() {
 		rec := member{}
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Area)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area)
 		if err != nil {
 			logger.Error(err)
 		}
