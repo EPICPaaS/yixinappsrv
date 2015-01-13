@@ -795,7 +795,7 @@ func addUser(member *member) bool {
 		logger.Error(err)
 		return false
 	}
-	_, err = tx.Exec("insert into user(id,name,nickname,avatar,name_py,name_quanpin,status,password,tenant_id,email,mobile,area,created,updated)values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", member.Uid, member.Name, member.NickName, member.Avatar, member.PYInitial, member.PYQuanPin, member.Status, member.Password, member.TenantId, member.Email, member.Mobile, member.Area, time.Now(), time.Now())
+	_, err = tx.Exec("insert into user(id,name,nickname,avatar,name_py,name_quanpin,status,password,tenant_id,email,mobile,tel,area,created,updated)values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", member.Uid, member.Name, member.NickName, member.Avatar, member.PYInitial, member.PYQuanPin, member.Status, member.Password, member.TenantId, member.Email, member.Mobile, member.Tel, member.Area, time.Now(), time.Now())
 	if err != nil {
 		logger.Error(err)
 
