@@ -800,7 +800,7 @@ func updateMember(member *member) bool {
 		return false
 	}
 
-	_, err = tx.Exec("update user set name=?, nickname=?, avatar=?, name_py=?, name_quanpin=?, status=?, rand=?, password=?, tenant_id=?, updated=?, email=? where id=?", member.Name, member.NickName, member.Avatar, member.PYInitial, member.PYQuanPin, member.Status, member.rand, member.Password, member.TenantId, time.Now(), member.Email, member.Uid)
+	_, err = tx.Exec("update user set name=?, nickname=?, avatar=?, name_py=?, name_quanpin=?, status=?, rand=?, password=?, tenant_id=?, updated=?, email=? , mobile=? where id=?", member.Name, member.NickName, member.Avatar, member.PYInitial, member.PYQuanPin, member.Status, member.rand, member.Password, member.TenantId, time.Now(), member.Email, member.Mobile, member.Uid)
 	if err != nil {
 
 		logger.Error(err)
@@ -1886,5 +1886,36 @@ func (*device) SetUserInfo(w http.ResponseWriter, r *http.Request) {
 		baseRes.ErrMsg = "会话超时请重新登录"
 		return
 	}
-	updateMember(user)
+	user.Mobile = args["mobile"].(string)
+	user.Tel = args["tel"].(string)
+	if !setUserInfo(user) {
+		baseRes.Ret = InternalErr
+		baseRes.ErrMsg = "set userinfo fail"
+		return
+	}
+}
+
+/*用户只能设置电话和座机*/
+func setUserInfo(user *member) bool {
+	tx, err := db.MySQL.Begin()
+	if err != nil {
+		logger.Error(err)
+		return false
+	}
+
+	_, err = tx.Exec("update user set  mobile=? , tel = ? where id=?", user.Mobile, user.Tel, user.Uid)
+	if err != nil {
+
+		logger.Error(err)
+		if err := tx.Rollback(); err != nil {
+			logger.Error(err)
+		}
+		return false
+	}
+	//提交操作
+	if err := tx.Commit(); err != nil {
+		logger.Error(err)
+		return false
+	}
+	return true
 }
