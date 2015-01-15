@@ -782,12 +782,12 @@ type org struct {
 
 /*修改用户信息*/
 func updateUser(member *member, tx *sql.Tx) error {
-	st, err := tx.Prepare("update user set name=?, nickname=?, avatar=?, name_py=?, name_quanpin=?, status=?, rand=?, password=?, tenant_id=?, updated=?, email=? where id=?")
+	st, err := tx.Prepare("update user set name=?, nickname=?, avatar=?, name_py=?, name_quanpin=?, status=?, rand=?, password=?, tenant_id=?, updated=?, email=? , mobile=?,tel=? where id=?")
 	if err != nil {
 		return err
 	}
 
-	_, err = st.Exec(member.Name, member.NickName, member.Avatar, member.PYInitial, member.PYQuanPin, member.Status, member.rand, member.Password, member.TenantId, time.Now(), member.Email, member.Uid)
+	_, err = st.Exec(member.Name, member.NickName, member.Avatar, member.PYInitial, member.PYQuanPin, member.Status, member.rand, member.Password, member.TenantId, time.Now(), member.Email, member.Mobile, member.Tel, member.Uid)
 
 	return err
 }
@@ -825,7 +825,7 @@ func addUser(member *member) bool {
 		logger.Error(err)
 		return false
 	}
-	_, err = tx.Exec("insert into user(id,name,nickname,avatar,name_py,name_quanpin,status,password,tenant_id,email,mobile,tel,area,created,updated)values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", member.Uid, member.Name, member.NickName, member.Avatar, member.PYInitial, member.PYQuanPin, member.Status, member.Password, member.TenantId, member.Email, member.Mobile, member.Tel, member.Area, time.Now(), time.Now())
+	_, err = tx.Exec("insert into user(id,name,nickname,avatar,name_py,name_quanpin,status,password,tenant_id,email,mobile,tel,area,created,updated)values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", member.Uid, member.Name, member.NickName, member.Avatar, member.PYInitial, member.PYQuanPin, member.Status, member.Password, member.TenantId, member.Email, member.Mobile, member.Tel, member.Area, time.Now(), time.Now())
 	if err != nil {
 		logger.Error(err)
 
@@ -922,6 +922,7 @@ func (*app) SyncUser(w http.ResponseWriter, r *http.Request) {
 		TenantId:  memberMap["tenantId"].(string),
 		Email:     memberMap["email"].(string),
 		Mobile:    memberMap["mobile"].(string),
+		Tel:       memberMap["tel"].(string),
 		Area:      memberMap["area"].(string),
 	}
 
