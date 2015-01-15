@@ -16,6 +16,7 @@ const (
 	EXIST_FILELINK         = "select id from file_link where sender_id =? and file_id =?"
 	SELECT_EXPIRE_FILELINK = "select  id, file_id from file_link where  updated  < ?"
 	UPDATE_USER_AVATAR     = "update user set avatar = ? where id = ?"
+	UPDATE_APP_AVATAR      = "update application set avatar = ? where id = ?"
 )
 
 type FileLink struct {
@@ -172,15 +173,29 @@ func (*device) GetUserAvatar(w http.ResponseWriter, r *http.Request) {
 
 	width := r.FormValue("width")
 	height := r.FormValue("height")
-	u := getUserByUid(uid)
+	var addr string
 
-	if nil != u && len(u.Avatar) == 0 {
-		w.Write([]byte("not avatar"))
-		return
+	if strings.HasSuffix(userName, USER_SUFFIX) { //用户头像
+
+		u := getUserByUid(uid)
+		if u == nil || len(u.Avatar) == 0 {
+			w.Write([]byte("not avatar"))
+			return
+		}
+		u.Avatar = strings.Replace(u.Avatar, ",", "/", 1)
+		addr = "http://" + Conf.WeedfsAddr + "/" + u.Avatar + "?width=" + width + "&height=" + height
+
+	} else if strings.HasSuffix(userName, APP_SUFFIX) { //应用头像
+
+		app, err := getApplication(uid)
+		if err != nil || app == nil || len(app.Avatar) == 0 {
+			w.Write([]byte("not avatar"))
+			return
+		}
+		app.Avatar = strings.Replace(app.Avatar, ",", "/", 1)
+		addr = "http://" + Conf.WeedfsAddr + "/" + app.Avatar + "?width=" + width + "&height=" + height
 	}
 
-	u.Avatar = strings.Replace(u.Avatar, ",", "/", 1)
-	addr := "http://" + Conf.WeedfsAddr + "/" + u.Avatar + "?width=" + width + "&height=" + height
 	resp, err := http.Get(addr)
 	if err != nil {
 		logger.Error(err)
@@ -236,19 +251,34 @@ func (*device) SetUserAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responseUpload := args["responseUpload"].(map[string]interface{})
+	userName := args["userName"].(string)
+
 	fileId := responseUpload["fid"].(string)
 	fileSuffix := args["fileExtention"].(string)
-	if !saveUserAvatar(user.Uid, fileId+"/."+fileSuffix) {
+	if !saveAvatar(userName, fileId+"/."+fileSuffix) {
 		baseRes.Ret = InternalErr
 		return
 	}
 
 }
 
-/*修改用户头像*/
-func saveUserAvatar(userid, avatar string) bool {
+/*修改头像*/
+func saveAvatar(userName, avatar string) bool {
 
-	row := db.MySQL.QueryRow("select avatar from user where id = ?", userid)
+	id := userName[:strings.Index(userName, "@")]
+	var isSql, setSql string
+
+	if strings.HasSuffix(userName, USER_SUFFIX) { //修改用户头像
+		isSql = "select avatar from user where id = ?"
+		setSql = UPDATE_USER_AVATAR
+	} else if strings.HasSuffix(userName, APP_SUFFIX) { //修改应用头像
+
+		isSql = "select avatar from application where id = ?"
+		setSql = UPDATE_APP_AVATAR
+	}
+
+	row := db.MySQL.QueryRow(isSql, id)
+
 	var oldAvatar string
 	if err := row.Scan(&oldAvatar); err != nil {
 		logger.Error(err)
@@ -265,7 +295,7 @@ func saveUserAvatar(userid, avatar string) bool {
 		logger.Error(err)
 		return false
 	}
-	_, err = tx.Exec(UPDATE_USER_AVATAR, avatar, userid)
+	_, err = tx.Exec(setSql, avatar, id)
 	if err != nil {
 		logger.Error(err)
 		if err := tx.Rollback(); err != nil {

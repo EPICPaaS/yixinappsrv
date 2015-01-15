@@ -35,9 +35,10 @@ type member struct {
 	TenantId    string    `json:"tenantId"`
 	Email       string    `json:"email"`
 	Mobile      string    `json:"mobile"`
-	Tel         string    `tel`
+	Tel         string    `json:"tel"`
 	Area        string    `json:"area"`
-	Description string    `json:description`
+	Description string    `json:"description"`
+	OrgName     string    `json:"orgName"`
 }
 type Tenant struct {
 	Id         string    `json:"id"`
@@ -70,15 +71,17 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 	EI := GetExtInterface(customer_id, "login")
 	if EI != nil {
 		if EI.Owner == 0 { //自己的登录
-			user = getUserByCode(username)
+			user = getUserAndOrgNameByName(username)
 			if user != nil && user.Password == password {
 				return true, user, ""
 			} else {
 				return false, nil, ""
 			}
 		} else {
+			/*用户可以输入手机和邮箱登录*/
+			u := GetUserByME(username)
 			data := []byte(`{
-					     "userName":` + username + `,
+					     "usercode":` + u.Name + `,
 					     "password":` + password +
 				`}`)
 			body := bytes.NewReader(data)
@@ -100,51 +103,28 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				logger.Errorf("convert to json failed (%s)", err.Error())
 				return false, nil, ""
 			}
-			success, ok := respBody["success"].(bool)
+			success, ok := respBody["succeed"].(bool)
 			if ok && success {
-				/*获取用户，同步*/
-				userBody, err := json.Marshal(respBody["user"])
-				if err != nil {
-					logger.Errorf("convert to json failed (%s)", err.Error())
-					return false, nil, ""
+
+				sessionId = respBody["token"].(string)
+				userMap := respBody["data"].(map[string]interface{})
+				/*更新用户信息,不新增*/
+				uid := userMap["id"].(string)
+				user := getUserAndOrgNameByUid(uid)
+				user.Name = userMap["code"].(string)
+				user.NickName = userMap["name"].(string)
+				user.Password = userMap["password"].(string)
+				user.TenantId = userMap["idOrganization"].(string)
+				user.Email = userMap["outmailid"].(string)
+				phone, ok := userMap["phone"].(string)
+
+				if ok && len(phone) > 0 {
+					user.Mobile = phone
 				}
 
-				if err := json.Unmarshal(userBody, &user); err != nil {
-					logger.Errorf("convert to json failed (%s)", err.Error())
+				if !updateMember(user) {
 					return false, nil, ""
 				}
-
-				exists := isUserExists(user.Uid)
-				if exists {
-					//有则更新
-					if !updateMember(user) {
-						return false, nil, ""
-					}
-				} else {
-					//新增
-					if !addUser(user) {
-						return false, nil, ""
-					}
-				}
-
-				/*获取租户信息，同步*/
-				tenantBody, err := json.Marshal(respBody["tenant"])
-				if err != nil {
-					logger.Errorf("convert to json failed (%s)", err.Error())
-					return false, nil, ""
-				}
-
-				var tenant Tenant
-				if err := json.Unmarshal(tenantBody, &tenant); err != nil {
-					logger.Errorf("convert to json failed (%s)", err.Error())
-					return false, nil, ""
-				}
-				tenant.CustomerId = customer_id
-				if !saveTennat(&tenant) {
-					logger.Error("登录设置tenant失败！")
-					return false, nil, ""
-				}
-				sessionId = respBody["sessionId"].(string)
 				//登录成功
 				return true, user, sessionId
 			} else {
@@ -156,8 +136,60 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 }
 
 /*根据userId获取成员信息*/
+func getUserAndOrgNameByUid(uid string) *member {
+
+	row := db.MySQL.QueryRow("select t1.id, t1.name, t1.nickname, t1.status,t1.rand, t1.avatar, t1.tenant_id,t1.email,t1.name_py, t1.name_quanpin,t1.password, t1.mobile, t1.tel ,t1.area , t3.name as org_name from user t1 LEFT JOIN org_user t2 on t1.id = t2.user_id LEFT JOIN org t3 on t2.org_id = t3.id where t1.id= ? ", uid)
+
+	rec := member{}
+	if err := row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.rand, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Password, &rec.Mobile, &rec.Tel, &rec.Area, &rec.OrgName); err != nil {
+
+		logger.Error(err)
+		return nil
+	} else {
+		if len(rec.Avatar) > 0 {
+			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+		}
+		rec.UserName = rec.Uid + USER_SUFFIX
+	}
+
+	return &rec
+}
+
+/*根据userId获取成员信息*/
+func getUserAndOrgNameByName(name string) *member {
+
+	row := db.MySQL.QueryRow("select t1.id, t1.name, t1.nickname, t1.status, t1.rand, t1.avatar, t1.tenant_id, t1.email, t1.name_py, t1.name_quanpin,t1.password, t1.mobile, t1.tel ,t1.area , t3.name as org_name from user t1 LEFT JOIN org_user t2 on t1.id = t2.user_id LEFT JOIN org t3 on t2.org_id = t3.id where t1.name= ? ", name)
+
+	rec := member{}
+	if err := row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.rand, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Password, &rec.Mobile, &rec.Tel, &rec.Area, &rec.OrgName); err != nil {
+
+		logger.Error(err)
+		return nil
+	} else {
+		if len(rec.Avatar) > 0 {
+			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+		}
+		rec.UserName = rec.Uid + USER_SUFFIX
+	}
+
+	return &rec
+}
+
+/*根据userId获取成员信息*/
 func getUserByUid(uid string) *member {
 	return getUserByField("id", uid)
+}
+
+/*通过手机和邮箱查询*/
+func GetUserByME(key string) *member {
+
+	fieldName := "mobile"
+	if strings.LastIndex(key, "@") > -1 {
+		fieldName = "email"
+	}
+	return getUserByField(fieldName, key)
 }
 
 /*根据 email或者name 获取成员信息,传入的code带@符号时是为email*/
@@ -176,7 +208,7 @@ func getUserByCode(code string) *member {
 /*根据传入的筛选列fieldName和参数fieldArg查询成员*/
 func getUserByField(fieldName, fieldArg string) *member {
 
-	sql := "select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin,password, mobile, tel ,area from user where " + fieldName + "=?"
+	sql := "select id, name, nickname, status, rand, avatar, tenant_id, email,name_py, name_quanpin,password, mobile, tel ,area from user where " + fieldName + "=?"
 
 	smt, err := db.MySQL.Prepare(sql)
 	if smt != nil {
@@ -198,7 +230,7 @@ func getUserByField(fieldName, fieldArg string) *member {
 
 	for row.Next() {
 		rec := member{}
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Password, &rec.Mobile, &rec.Tel, &rec.Area)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.rand, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Password, &rec.Mobile, &rec.Tel, &rec.Area)
 		if err != nil {
 			logger.Error(err)
 		}
@@ -284,7 +316,7 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 	userName := args["userName"].(string)
 	uid := userName[:strings.LastIndex(userName, USER_SUFFIX)]
 
-	toUser := getUserByUid(uid)
+	toUser := getUserAndOrgNameByUid(uid)
 	if nil == toUser {
 		baseRes.Ret = NotFound
 
@@ -296,8 +328,6 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 		toUser.StarFriend = 1
 	}
 
-	toUser.Avatar = strings.Replace(toUser.Avatar, ",", "/", 1)
-	toUser.Avatar = "http://" + Conf.WeedfsAddr + "/" + toUser.Avatar
 	res["member"] = toUser
 }
 
@@ -389,8 +419,6 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res["token"] = token
-	member.Avatar = strings.Replace(member.Avatar, ",", "/", 1)
-	member.Avatar = "http://" + Conf.WeedfsAddr + "/" + member.Avatar
 	res["member"] = member
 }
 
@@ -423,7 +451,7 @@ func sortMemberList(lst []*member) {
 
 /*根据租户id（TenantId）获取成员*/
 func getUserListByTenantId(id string) members {
-	smt, err := db.MySQL.Prepare("select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin, mobile, tel, area from user where tenant_id=?")
+	smt, err := db.MySQL.Prepare("select id, name, nickname, status,rand, avatar, tenant_id, email,name_py, name_quanpin, mobile, tel, area from user where tenant_id=?")
 	if smt != nil {
 		defer smt.Close()
 	} else {
@@ -443,7 +471,7 @@ func getUserListByTenantId(id string) members {
 	ret := members{}
 	for row.Next() {
 		rec := new(member)
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.rand, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area)
 		if err != nil {
 			logger.Error(err)
 		}
@@ -455,7 +483,7 @@ func getUserListByTenantId(id string) members {
 
 /*根据单位id（TenantId）获取成员*/
 func getUserListByOrgId(id string) members {
-	smt, err := db.MySQL.Prepare("select `user`.`id`, `user`.`name`, `user`.`nickname`, `user`.`status`, `user`.`avatar`, `user`.`tenant_id`, `user`.`name_py`, `user`.`name_quanpin`, `user`.`mobile`, `user`.`tel`, `user`.`area`,`org_user`.`sort`	from `user`,`org_user` where `user`.`id`=`org_user`.`user_id` and org_id=?")
+	smt, err := db.MySQL.Prepare("select `user`.`id`, `user`.`name`, `user`.`nickname`, `user`.`status`, `user`.`avatar`, `user`.`tenant_id`, `email`,`user`.`name_py`, `user`.`name_quanpin`, `user`.`mobile`, `user`.`tel`, `user`.`area`,`org_user`.`sort`	,`org`.`name` as org_name from `user`,`org_user` ,`org` where `user`.`id`=`org_user`.`user_id` and `org_user`.`org_id` =`org`.`id`  and org_id=? ")
 	if smt != nil {
 		defer smt.Close()
 	} else {
@@ -475,13 +503,15 @@ func getUserListByOrgId(id string) members {
 	ret := members{}
 	for row.Next() {
 		rec := new(member)
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area, &rec.Sort)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area, &rec.Sort, &rec.OrgName)
 		if err != nil {
 			logger.Error(err)
 		}
 		rec.UserName = rec.Uid + USER_SUFFIX
-		rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
-		rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+		if len(rec.Avatar) > 0 {
+			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+		}
 		ret = append(ret, rec)
 	}
 	return ret
@@ -752,7 +782,7 @@ type org struct {
 
 /*修改用户信息*/
 func updateUser(member *member, tx *sql.Tx) error {
-	st, err := tx.Prepare("update user set name=?, nickname=?, avastar=?, name_py=?, name_quanpin=?, status=?, rand=?, password=?, tenant_id=?, updated=?, email=? where id=?")
+	st, err := tx.Prepare("update user set name=?, nickname=?, avatar=?, name_py=?, name_quanpin=?, status=?, rand=?, password=?, tenant_id=?, updated=?, email=? where id=?")
 	if err != nil {
 		return err
 	}
@@ -1502,7 +1532,9 @@ func (*device) SearchUser(w http.ResponseWriter, r *http.Request) {
 /*获取用户所有好友信息*/
 func getStarUser(userId string) members {
 	ret := members{}
-	sql := "select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin, mobile,tel, area from user where id in (select to_user_id from user_user where from_user_id=?)"
+	sql := `select t2.id, t2.name, t2.nickname, t2.status, t2.rand,t2.avatar, t2.tenant_id, t2.email,t2.name_py, t2.name_quanpin, t2.mobile,t2.tel, t2.area , t4.name as org_name
+                      from user_user t1 LEFT JOIN user t2 on t1.to_user_id=t2.id LEFT JOIN  org_user t3 on t2.id = t3.user_id LEFT JOIN org t4 on t3.org_id = t4.id 
+                      where t1.from_user_id = ? ORDER BY t1.sort`
 
 	smt, err := db.MySQL.Prepare(sql)
 	if smt != nil {
@@ -1524,14 +1556,16 @@ func getStarUser(userId string) members {
 
 	for row.Next() {
 		rec := member{}
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.rand, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area, &rec.OrgName)
 		if err != nil {
 			logger.Error(err)
 		}
 
 		rec.UserName = rec.Uid + USER_SUFFIX
-		rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
-		rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+		if len(rec.Avatar) > 0 {
+			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+		}
 		ret = append(ret, &rec)
 	}
 
@@ -1541,7 +1575,7 @@ func getStarUser(userId string) members {
 /*通过name搜索用户，返回搜索结果（带分页），和结果条数*/
 func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
 	ret := members{}
-	sql := "select id, name, nickname, status, avatar, tenant_id, name_py, name_quanpin, mobile, tel, area from user where tenant_id=? and nickname like ? limit ?, ?"
+	sql := "select id, name, nickname, status,rand, avatar, tenant_id,email, name_py, name_quanpin, mobile, tel, area from user where tenant_id=? and nickname like ? limit ?, ?"
 
 	smt, err := db.MySQL.Prepare(sql)
 	if smt != nil {
@@ -1563,14 +1597,16 @@ func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
 
 	for row.Next() {
 		rec := member{}
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.rand, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area)
 		if err != nil {
 			logger.Error(err)
 		}
 
 		rec.UserName = rec.Uid + USER_SUFFIX
-		rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
-		rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+		if len(rec.Avatar) > 0 {
+			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+		}
 		ret = append(ret, &rec)
 	}
 
@@ -1812,7 +1848,7 @@ func GetExtInterface(customer_id, Type string) *ExternalInterface {
 }
 
 /*用户修改用户信息；用户只能修改自己的用户信息*/
-func SetUserInfo(w http.ResponseWriter, r *http.Request) {
+func (*device) SetUserInfo(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "POST" {
 		http.Error(w, "Method Not Allowed", 405)
@@ -1849,22 +1885,5 @@ func SetUserInfo(w http.ResponseWriter, r *http.Request) {
 		baseRes.ErrMsg = "会话超时请重新登录"
 		return
 	}
-
-	userStr, ok := args["user"]
-	if ok {
-		userInfoBody, err := json.Marshal(userStr)
-		if err != nil {
-			logger.Error(err)
-			baseRes.Ret = InternalErr
-			return
-		}
-		var userInfo member
-		if err := json.Unmarshal(userInfoBody, &userInfo); err != nil {
-			res["ret"] = ParamErr
-			logger.Errorf("ioutil.ReadAll() failed (%s)", err.Error())
-			return
-		}
-
-	}
-
+	updateMember(user)
 }

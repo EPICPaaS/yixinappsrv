@@ -25,19 +25,20 @@ const (
 
 // 应用结构.
 type application struct {
-	Id        string    `json:"id"`
-	Name      string    `json:"name"`
-	Token     string    `json:"token"`
-	Type      string    `json:"type"`
-	Status    int       `json:"status"`
-	Sort      int       `json:"sort"`
-	Level     int       `json:"level"`
-	Avatar    string    `json:"avatar"`
-	TenantId  string    `json:tenantId`
-	Created   time.Time `json:"created"`
-	Updated   time.Time `json:"updated"`
-	PYInitial string    `json:"pYInitial"`
-	PYQuanPin string    `json:"pYQuanPin"`
+	Id          string    `json:"id"`
+	Name        string    `json:"name"`
+	Token       string    `json:"token"`
+	Type        string    `json:"type"`
+	Status      int       `json:"status"`
+	Sort        int       `json:"sort"`
+	Level       int       `json:"level"`
+	Avatar      string    `json:"avatar"`
+	TenantId    string    `json:tenantId`
+	Created     time.Time `json:"created"`
+	Updated     time.Time `json:"updated"`
+	PYInitial   string    `json:"pYInitial"`
+	PYQuanPin   string    `json:"pYQuanPin"`
+	Description string    `json:"description"`
 }
 
 // 应用操作项
@@ -59,7 +60,7 @@ func getApplication(appId string) (*application, error) {
 	application := application{}
 
 	if err := row.Scan(&application.Id, &application.Name, &application.Token, &application.Type, &application.Status,
-		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin); err != nil {
+		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description); err != nil {
 		logger.Error(err)
 
 		return nil, err

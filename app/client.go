@@ -264,11 +264,19 @@ func (*device) CheckUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deviceType := args["type"].(string)
+	versionCode := int(args["versionCode"].(float64))
 
 	clientVersion, err := getLatestVerion(deviceType)
 	if nil != err {
 		baseRes.Ret = InternalErr
+		return
+	}
 
+	//检查是否更新
+	if clientVersion.VersionCode > versionCode {
+		res["isUpdate"] = true
+	} else {
+		res["isUpdate"] = false
 		return
 	}
 
