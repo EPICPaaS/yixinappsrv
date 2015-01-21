@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"github.com/EPICPaaS/go-uuid/uuid"
@@ -9,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -80,12 +80,8 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 		} else {
 			/*用户可以输入手机和邮箱登录*/
 			u := GetUserByME(username)
-			data := []byte(`{
-					     "usercode":` + u.Name + `,
-					     "password":` + password +
-				`}`)
-			body := bytes.NewReader(data)
-			res, err := http.Post(EI.HttpUrl, "text/plain;charset=UTF-8", body)
+
+			res, err := http.Get(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
 			if err != nil {
 				logger.Error(err)
 				return false, nil, ""
@@ -111,11 +107,13 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				/*更新用户信息,不新增*/
 				uid := userMap["id"].(string)
 				user := getUserAndOrgNameByUid(uid)
+
+				logger.Info(uid)
 				user.Name = userMap["code"].(string)
 				user.NickName = userMap["name"].(string)
 				user.Password = userMap["password"].(string)
 				user.TenantId = userMap["idOrganization"].(string)
-				user.Email = userMap["outmailid"].(string)
+				user.Email = userMap["lyncid"].(string)
 				phone, ok := userMap["phone"].(string)
 
 				if ok && len(phone) > 0 {
@@ -138,7 +136,7 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 /*根据userId获取成员信息*/
 func getUserAndOrgNameByUid(uid string) *member {
 
-	row := db.MySQL.QueryRow("select t1.id, t1.name, t1.nickname, t1.status,t1.rand, t1.avatar, t1.tenant_id,t1.email,t1.name_py, t1.name_quanpin,t1.password, t1.mobile, t1.tel ,t1.area , t3.name as org_name from user t1 LEFT JOIN org_user t2 on t1.id = t2.user_id LEFT JOIN org t3 on t2.org_id = t3.id where t1.id= ? ", uid)
+	row := db.MySQL.QueryRow("select t1.id, t1.name, t1.nickname, t1.status,t1.rand, t1.avatar, t1.tenant_id,t1.email,t1.name_py, t1.name_quanpin,t1.password, t1.mobile, t1.tel ,t1.area , IFNULL(t3.name,'无部门')  as org_name from user t1 LEFT JOIN org_user t2 on t1.id = t2.user_id LEFT JOIN org t3 on t2.org_id = t3.id where t1.id= ? ", uid)
 
 	rec := member{}
 	if err := row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.rand, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Password, &rec.Mobile, &rec.Tel, &rec.Area, &rec.OrgName); err != nil {
@@ -314,12 +312,36 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userName := args["userName"].(string)
-	uid := userName[:strings.LastIndex(userName, USER_SUFFIX)]
+	uid := userName[:strings.LastIndex(userName, "@")]
 
-	toUser := getUserAndOrgNameByUid(uid)
+	var toUser *member
+	if strings.HasSuffix(userName, USER_SUFFIX) { //用户
+
+		toUser = getUserAndOrgNameByUid(uid)
+
+	} else if strings.HasSuffix(userName, APP_SUFFIX) { //应用
+
+		app, err := getApplication(uid)
+		if err != nil || app == nil {
+			baseRes.ErrMsg = err.Error()
+			baseRes.Ret = ParamErr
+		}
+
+		toUser = &member{}
+		toUser.Uid = app.Id + APP_SUFFIX
+		toUser.Name = app.Name
+		toUser.NickName = app.Name
+		toUser.Status = strconv.Itoa(app.Status)
+		toUser.Sort = app.Sort
+		toUser.Avatar = app.Avatar
+		toUser.TenantId = app.TenantId
+		toUser.PYInitial = app.PYInitial
+		toUser.PYQuanPin = app.PYQuanPin
+		toUser.Description = app.Description
+	}
+
 	if nil == toUser {
 		baseRes.Ret = NotFound
-
 		return
 	}
 
@@ -522,7 +544,7 @@ func (*device) GetOrgUserList(w http.ResponseWriter, r *http.Request) {
 	baseRes := map[string]interface{}{"ret": OK, "errMsg": ""}
 
 	body := ""
-	res := map[string]interface{}{"baseResponse": baseRes}
+	res := map[string]interface{}{"baseResponse": &baseRes}
 	defer RetPWriteJSON(w, r, res, &body, time.Now())
 
 	bodyBytes, err := ioutil.ReadAll(r.Body)
@@ -873,7 +895,7 @@ func (*app) SyncUser(w http.ResponseWriter, r *http.Request) {
 	tx, err := db.MySQL.Begin()
 
 	body := ""
-	res := map[string]interface{}{"baseResponse": baseRes}
+	res := map[string]interface{}{"baseResponse": &baseRes}
 	defer RetPWriteJSON(w, r, res, &body, time.Now())
 
 	if err != nil {
@@ -963,7 +985,7 @@ func (*app) SyncOrg(w http.ResponseWriter, r *http.Request) {
 	tx, err := db.MySQL.Begin()
 
 	body := ""
-	res := map[string]interface{}{"baseResponse": baseRes}
+	res := map[string]interface{}{"baseResponse": &baseRes}
 	defer RetPWriteJSON(w, r, res, &body, time.Now())
 
 	if err != nil {
@@ -1303,7 +1325,7 @@ func (*device) GetOrgInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	baseRes := map[string]interface{}{"ret": OK, "errMsg": ""}
 	body := ""
-	res := map[string]interface{}{"baseResponse": baseRes}
+	res := map[string]interface{}{"baseResponse": &baseRes}
 	defer RetPWriteJSON(w, r, res, &body, time.Now())
 
 	bodyBytes, err := ioutil.ReadAll(r.Body)
@@ -1476,7 +1498,7 @@ func (*device) SearchUser(w http.ResponseWriter, r *http.Request) {
 	}
 	baseRes := map[string]interface{}{"ret": OK, "errMsg": ""}
 	body := ""
-	res := map[string]interface{}{"baseResponse": baseRes}
+	res := map[string]interface{}{"baseResponse": &baseRes}
 	defer RetPWriteJSON(w, r, res, &body, time.Now())
 
 	bodyBytes, err := ioutil.ReadAll(r.Body)
@@ -1857,7 +1879,7 @@ func (*device) SetUserInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	baseRes := baseResponse{OK, ""}
 	body := ""
-	res := map[string]interface{}{"baseResponse": baseRes}
+	res := map[string]interface{}{"baseResponse": &baseRes}
 	defer RetPWriteJSON(w, r, res, &body, time.Now())
 
 	bodyBytes, err := ioutil.ReadAll(r.Body)

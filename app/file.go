@@ -319,3 +319,23 @@ func saveAvatar(userName, avatar string) bool {
 
 	return true
 }
+
+/*保存用户头像信息*/
+func (*device) GetWelcomeImg(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != "GET" {
+		http.Error(w, "Method Not Allowed", 405)
+		return
+	}
+
+	resource, err := GetResourceByName("welcome")
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+
+	_, err = w.Write([]byte(resource.Content))
+	if err != nil {
+		logger.Error(err)
+	}
+}

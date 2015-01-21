@@ -66,6 +66,11 @@ func getApplication(appId string) (*application, error) {
 		return nil, err
 	}
 
+	if len(application.Avatar) > 0 {
+		application.Avatar = strings.Replace(application.Avatar, ",", "/", 1)
+		application.Avatar = "http://" + Conf.WeedfsAddr + "/" + application.Avatar
+	}
+
 	return &application, nil
 }
 
@@ -83,7 +88,10 @@ func getAllApplication() ([]*member, error) {
 
 			return nil, err
 		}
-
+		if len(rec.Avatar) > 0 {
+			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+		}
 		rec.UserName = rec.Uid + APP_SUFFIX
 		ret = append(ret, &rec)
 

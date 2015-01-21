@@ -17,6 +17,9 @@ const (
 	// 根据资源id 获取资源
 	SelectResourceByIdSQL = "SELECT * FROM `resource` where `id` = ?"
 
+	//根据nam查资源
+	SelectResourceByNameSQL = "SELECT * FROM `resource` where `name` = ?"
+
 	// 根据租户 id 查询租户的资源.
 	SelectResourceByTenantIdSQL = "SELECT * FROM `resource` where `customer_id`  = (select  customer_id from tenant where  id = ?)"
 
@@ -42,6 +45,20 @@ type Resource struct {
 // 在数据库中查询资源.
 func GetResourceById(resourceId string) (*Resource, error) {
 	row := db.MySQL.QueryRow(SelectResourceByIdSQL, resourceId)
+
+	resource := Resource{}
+	if err := row.Scan(&resource.Id, &resource.CustomerId, &resource.Name, &resource.Description, &resource.Type, &resource.Content, &resource.Created, &resource.Updated); err != nil {
+		logger.Error(err)
+
+		return nil, err
+	}
+
+	return &resource, nil
+}
+
+// 在数据库中查询资源.
+func GetResourceByName(name string) (*Resource, error) {
+	row := db.MySQL.QueryRow(SelectResourceByNameSQL, name)
 
 	resource := Resource{}
 	if err := row.Scan(&resource.Id, &resource.CustomerId, &resource.Name, &resource.Description, &resource.Type, &resource.Content, &resource.Created, &resource.Updated); err != nil {
