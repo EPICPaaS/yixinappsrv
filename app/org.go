@@ -80,7 +80,9 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 		} else {
 			/*用户可以输入手机和邮箱登录*/
 			u := GetUserByME(username)
-
+			if u == nil {
+				return false, nil, ""
+			}
 			res, err := http.Get(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
 			if err != nil {
 				logger.Error(err)
