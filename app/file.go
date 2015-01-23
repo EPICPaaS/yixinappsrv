@@ -195,7 +195,7 @@ func (*device) GetUserAvatar(w http.ResponseWriter, r *http.Request) {
 
 		addr = app.Avatar + "?width=" + width + "&height=" + height
 	}
-	logger.Info(addr)
+
 	resp, err := http.Get(addr)
 	if err != nil {
 		logger.Error(err)
