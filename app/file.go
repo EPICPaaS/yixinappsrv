@@ -192,10 +192,10 @@ func (*device) GetUserAvatar(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("not avatar"))
 			return
 		}
-		app.Avatar = strings.Replace(app.Avatar, ",", "/", 1)
-		addr = "http://" + Conf.WeedfsAddr + "/" + app.Avatar + "?width=" + width + "&height=" + height
-	}
 
+		addr = app.Avatar + "?width=" + width + "&height=" + height
+	}
+	logger.Info(addr)
 	resp, err := http.Get(addr)
 	if err != nil {
 		logger.Error(err)
