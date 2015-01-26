@@ -138,7 +138,7 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 /*根据userId获取成员信息*/
 func getUserAndOrgNameByUid(uid string) *member {
 
-	row := db.MySQL.QueryRow("select t1.id, t1.name, t1.nickname, t1.status,t1.rand, t1.avatar, t1.tenant_id,t1.email,t1.name_py, t1.name_quanpin,t1.password, t1.mobile, t1.tel ,t1.area , IFNULL(t3.name,'无部门')  as org_name from user t1 LEFT JOIN org_user t2 on t1.id = t2.user_id LEFT JOIN org t3 on t2.org_id = t3.id where t1.id= ? ", uid)
+	row := db.MySQL.QueryRow("select MAX(t1.id) as id, t1.name, t1.nickname, t1.status,t1.rand, t1.avatar, t1.tenant_id,t1.email,t1.name_py, t1.name_quanpin,t1.password, t1.mobile, t1.tel ,t1.area , IFNULL(t3.name,'无部门')  as org_name from user t1 LEFT JOIN org_user t2 on t1.id = t2.user_id LEFT JOIN org t3 on t2.org_id = t3.id where t1.id= ? ", uid)
 
 	rec := member{}
 	if err := row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.rand, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Password, &rec.Mobile, &rec.Tel, &rec.Area, &rec.OrgName); err != nil {
@@ -1559,7 +1559,7 @@ func getStarUser(userId string) members {
 	ret := members{}
 	sql := `select t2.id, t2.name, t2.nickname, t2.status, t2.rand,t2.avatar, t2.tenant_id, t2.email,t2.name_py, t2.name_quanpin, t2.mobile,t2.tel, t2.area , t4.name as org_name
                       from user_user t1 LEFT JOIN user t2 on t1.to_user_id=t2.id LEFT JOIN  org_user t3 on t2.id = t3.user_id LEFT JOIN org t4 on t3.org_id = t4.id 
-                      where t1.from_user_id = ? ORDER BY t1.sort`
+                      where t1.from_user_id = ? GROUP BY t2.id ORDER BY t1.sort`
 
 	smt, err := db.MySQL.Prepare(sql)
 	if smt != nil {
