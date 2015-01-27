@@ -40,7 +40,7 @@ const (
 
 // InitConfig initialize config file path
 func init() {
-	flag.StringVar(&confFile, "c", "./web.conf", " set web config file path")
+	flag.StringVar(&confFile, "c", "./yixin-web.conf", " set web config file path")
 }
 
 type Config struct {

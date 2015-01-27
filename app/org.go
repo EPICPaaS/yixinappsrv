@@ -1600,7 +1600,7 @@ func getStarUser(userId string) members {
 /*通过name搜索用户，返回搜索结果（带分页），和结果条数*/
 func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
 	ret := members{}
-	sql := "select id, name, nickname, status,rand, avatar, tenant_id,email, name_py, name_quanpin, mobile, tel, area from user where tenant_id=? and nickname like ? limit ?, ?"
+	sql := "select t1.id,t1.name,t1.nickname,t1.status,t1.rand,t1.avatar,t1.tenant_id, t1.email,t1.name_py,t1.name_quanpin,t1.mobile,t1.tel,t1.area,t3.name as org_name from user t1 LEFT JOIN org_user t2 ON t1.id = t2.user_id LEFT JOIN org t3 ON t2.org_id = t3.id where t1.tenant_id=? and t1.nickname like ? limit ?, ?"
 
 	smt, err := db.MySQL.Prepare(sql)
 	if smt != nil {
