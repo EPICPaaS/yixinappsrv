@@ -309,7 +309,6 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 	user := getUserByToken(token)
 	if nil == user {
 		baseRes.Ret = AuthErr
-
 		return
 	}
 
@@ -506,8 +505,9 @@ func getUserListByTenantId(id string) members {
 }
 
 /*根据单位id（TenantId）获取成员*/
-func getUserListByOrgId(id string) members {
-	smt, err := db.MySQL.Prepare("select `user`.`id`, `user`.`name`, `user`.`nickname`, `user`.`status`, `user`.`avatar`, `user`.`tenant_id`, `email`,`user`.`name_py`, `user`.`name_quanpin`, `user`.`mobile`, `user`.`tel`, `user`.`area`,`org_user`.`sort`	,`org`.`name` as org_name from `user`,`org_user` ,`org` where `user`.`id`=`org_user`.`user_id` and `org_user`.`org_id` =`org`.`id`  and org_id=? ")
+func getUserListByOrgId(id, currentId string) members {
+
+	smt, err := db.MySQL.Prepare("select `user`.`id`, `user`.`name`, `user`.`nickname`, `user`.`status`, `user`.`avatar`, `user`.`tenant_id`, `email`,`user`.`name_py`, `user`.`name_quanpin`, `user`.`mobile`, `user`.`tel`, `user`.`area`,`org_user`.`sort`	,`org`.`name` as org_name from `user`,`org_user` ,`org` where `user`.`id`=`org_user`.`user_id` and `org_user`.`org_id` =`org`.`id`  and org_id=? AND `user`.id != ? ")
 	if smt != nil {
 		defer smt.Close()
 	} else {
@@ -518,7 +518,7 @@ func getUserListByOrgId(id string) members {
 		return nil
 	}
 
-	row, err := smt.Query(id)
+	row, err := smt.Query(id, currentId)
 	if row != nil {
 		defer row.Close()
 	} else {
@@ -543,8 +543,8 @@ func getUserListByOrgId(id string) members {
 
 /*获取单位的人员信息*/
 func (*device) GetOrgUserList(w http.ResponseWriter, r *http.Request) {
-	baseRes := map[string]interface{}{"ret": OK, "errMsg": ""}
 
+	baseRes := baseResponse{OK, ""}
 	body := ""
 	res := map[string]interface{}{"baseResponse": &baseRes}
 	defer RetPWriteJSON(w, r, res, &body, time.Now())
@@ -559,13 +559,23 @@ func (*device) GetOrgUserList(w http.ResponseWriter, r *http.Request) {
 
 	input := map[string]interface{}{}
 	if err := json.Unmarshal(bodyBytes, &input); err != nil {
-		baseRes["errMsg"] = err.Error()
-		baseRes["ret"] = ParamErr
+		baseRes.ErrMsg = err.Error()
+		baseRes.Ret = ParamErr
+		return
+	}
+
+	baseReq := input["baseRequest"].(map[string]interface{})
+
+	// Token 校验
+	token := baseReq["token"].(string)
+	user := getUserByToken(token)
+	if nil == user {
+		baseRes.Ret = AuthErr
 		return
 	}
 
 	orgId := input["orgid"].(string)
-	memberList := getUserListByOrgId(orgId)
+	memberList := getUserListByOrgId(orgId, user.Uid)
 	res["memberCount"] = len(memberList)
 	res["memberList"] = memberList
 }
@@ -609,7 +619,7 @@ func (*app) GetOrgUserList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orgId := args["orgid"].(string)
-	memberList := getUserListByOrgId(orgId)
+	memberList := getUserListByOrgId(orgId, "")
 	res["memberCount"] = len(memberList)
 	res["memberList"] = memberList
 }
@@ -1543,7 +1553,7 @@ func (*device) SearchUser(w http.ResponseWriter, r *http.Request) {
 	var cnt int
 	switch searchType {
 	case "user":
-		memberList, cnt = searchUser(currentUser.TenantId, searchKey.(string), int(offset.(float64)), int(limit.(float64)))
+		memberList, cnt = searchUser(currentUser.TenantId, searchKey.(string), currentUser.Uid, int(offset.(float64)), int(limit.(float64)))
 	case "app":
 		break
 	}
@@ -1598,9 +1608,9 @@ func getStarUser(userId string) members {
 }
 
 /*通过name搜索用户，返回搜索结果（带分页），和结果条数*/
-func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
+func searchUser(tenantId, nickName, currentId string, offset, limit int) (members, int) {
 	ret := members{}
-	sql := "select t1.id,t1.name,t1.nickname,t1.status,t1.rand,t1.avatar,t1.tenant_id, t1.email,t1.name_py,t1.name_quanpin,t1.mobile,t1.tel,t1.area,t3.name as org_name from user t1 LEFT JOIN org_user t2 ON t1.id = t2.user_id LEFT JOIN org t3 ON t2.org_id = t3.id where t1.tenant_id=? and t1.nickname like ? limit ?, ?"
+	sql := "select t1.id,t1.name,t1.nickname,t1.status,t1.rand,t1.avatar,t1.tenant_id, t1.email,t1.name_py,t1.name_quanpin,t1.mobile,t1.tel,t1.area,t3.name as org_name from user t1 LEFT JOIN org_user t2 ON t1.id = t2.user_id LEFT JOIN org t3 ON t2.org_id = t3.id where t1.tenant_id=? and t1.nickname like ? and t1.id != ? limit ?, ?"
 
 	smt, err := db.MySQL.Prepare(sql)
 	if smt != nil {
@@ -1613,7 +1623,7 @@ func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
 		return nil, 0
 	}
 
-	row, err := smt.Query(tenantId, "%"+nickName+"%", offset, limit)
+	row, err := smt.Query(tenantId, "%"+nickName+"%", currentId, offset, limit)
 	if row != nil {
 		defer row.Close()
 	} else {
@@ -1622,7 +1632,7 @@ func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
 
 	for row.Next() {
 		rec := member{}
-		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.rand, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.rand, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area, &rec.OrgName)
 		if err != nil {
 			logger.Error(err)
 		}
@@ -1635,7 +1645,7 @@ func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
 		ret = append(ret, &rec)
 	}
 
-	sql = "select count(*) from user where tenant_id=?  and  nickname like ?"
+	sql = "select count(*) from user where tenant_id=?  and  nickname like ? and id != ?"
 	smt, err = db.MySQL.Prepare(sql)
 	if smt != nil {
 		defer smt.Close()
@@ -1647,7 +1657,7 @@ func searchUser(tenantId, nickName string, offset, limit int) (members, int) {
 		return nil, 0
 	}
 
-	row, err = smt.Query(tenantId, "%"+nickName+"%")
+	row, err = smt.Query(tenantId, "%"+nickName+"%", currentId)
 	if row != nil {
 		defer row.Close()
 	} else {
