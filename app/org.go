@@ -7,6 +7,7 @@ import (
 	"github.com/EPICPaaS/yixinappsrv/db"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -83,6 +84,7 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 			if u == nil {
 				return false, nil, ""
 			}
+			//logger.Info(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
 			res, err := http.Get(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
 			if err != nil {
 				logger.Error(err)
@@ -194,14 +196,14 @@ func GetUserByME(key string) *member {
 
 /*根据 email或者name 获取成员信息,传入的code带@符号时是为email*/
 func getUserByCode(code string) *member {
-	isEmail := false
-	if strings.LastIndex(code, "@") > -1 {
-		isEmail = true
-	}
+
 	fieldName := "name"
-	if isEmail {
+	if strings.LastIndex(code, "@") > -1 {
 		fieldName = "email"
+	} else if m, _ := regexp.MatchString("[0-9]{11}", code); m { //手机号
+		fieldName = "mobile"
 	}
+
 	return getUserByField(fieldName, code)
 }
 
