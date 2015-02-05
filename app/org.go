@@ -40,7 +40,7 @@ type member struct {
 	Area        string    `json:"area"`
 	Description string    `json:"description"`
 	OrgName     string    `json:"orgName"`
-	Fllow       string    `json:"follow"`
+	Follow      string    `json:"follow"`
 }
 type Tenant struct {
 	Id         string    `json:"id"`
@@ -330,6 +330,7 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 			baseRes.ErrMsg = err.Error()
 			baseRes.Ret = ParamErr
 		}
+		userapp, _ := getUserApp(app.Id, user.Uid)
 
 		toUser = &member{}
 		toUser.Uid = app.Id + APP_SUFFIX
@@ -341,6 +342,7 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 		toUser.PYInitial = app.PYInitial
 		toUser.PYQuanPin = app.PYQuanPin
 		toUser.Description = app.Description
+		toUser.Follow = userapp.Follow
 	}
 
 	if nil == toUser {

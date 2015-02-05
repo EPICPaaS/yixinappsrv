@@ -17,7 +17,7 @@ const (
 	// 根据 id 查询应用记录.
 	SelectApplicationById = "SELECT  * FROM `application` WHERE `id` = ?"
 	// 查询应用记录.
-	SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF(a.fllow = '1','1','0') as fllow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
+	SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF(a.follow = '1','1','0') as fllow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
 	// 根据 token 获取应用记录.
 	SelectApplicationByToken = "SELECT * FROM `application` WHERE `token` = ?"
 	//根据应用ID查询应用操作项列表
@@ -25,11 +25,11 @@ const (
 	//根据操作项父ID查询应用操作项列表
 	SelectAppOpertionByParentId = "SELECT `id`, `app_id`, `content`,`action`, `operation_type`,`sort`  FROM `operation` WHERE `parent_id` = ?  order by  sort "
 	//插入用户关注的应用
-	InsertAppUser = "INSERT INTO `app_user`(`id`,`appid`,`uid`,`fllow`) VALUES(?,?,?,'1')"
+	InsertAppUser = "INSERT INTO `app_user`(`id`,`appid`,`uid`,`follow`) VALUES(?,?,?,'1')"
 	//删除用户关注应用信息
 	DeleteAppUser = "DELETE FROM app_user where appid = ?  and uid = ? "
 	//查询用户是否关注该企业号
-	SelectAppUser = "SELECT `id`,`appid`,`uid`,`fllow` FROM `app_user` where appid = ?  and uid = ? "
+	SelectAppUser = "SELECT `id`,`appid`,`uid`,`follow` FROM `app_user` where appid = ?  and uid = ? "
 )
 
 // 应用结构.
@@ -63,10 +63,11 @@ type operation struct {
 }
 
 // 用户关注的应用
-type UserApp struct {
-	Id    string `json:"id"`
-	AppId string `json:"appId"`
-	UId   string `json:"uid"`
+type userapp struct {
+	Id     string `json:"id"`
+	AppId  string `json:"appId"`
+	UId    string `json:"uid"`
+	Follow string `json:"follow"`
 }
 
 // 根据 id 查询应用记录.
@@ -99,7 +100,7 @@ func getAllApplication(tenantId, uid string) ([]*member, error) {
 	for rows.Next() {
 		rec := member{}
 
-		if err := rows.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Sort, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Description, &rec.Fllow); err != nil {
+		if err := rows.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Sort, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Description, &rec.Follow); err != nil {
 			logger.Error(err)
 
 			return nil, err
@@ -281,7 +282,7 @@ func (*device) GetAppOperationList(w http.ResponseWriter, r *http.Request) {
 }
 
 /*用户关注应用*/
-func (*app) UserFllowApp(w http.ResponseWriter, r *http.Request) {
+func (*device) UserFollowApp(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Method Not Allowed", 405)
 		return
@@ -325,7 +326,7 @@ func (*app) UserFllowApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appId := appName[:strings.Index(appName, "@")]
-	userApp := &UserApp{
+	userApp := &userapp{
 		AppId: appId,
 		UId:   user.Uid,
 	}
@@ -358,7 +359,7 @@ func (*app) UserFllowApp(w http.ResponseWriter, r *http.Request) {
 }
 
 /*用户取消关注应用*/
-func (*app) UserUnFllowApp(w http.ResponseWriter, r *http.Request) {
+func (*device) UserUnFollowApp(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "POST" {
 		http.Error(w, "Method Not Allowed", 405)
@@ -431,17 +432,23 @@ func (*app) UserUnFllowApp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-/*保存apnstoken证书*/
-func insertUserApp(userApp *UserApp) bool {
-	rows, err := db.MySQL.Query(SelectAppUser, userApp.AppId, userApp.UId)
-	if rows != nil {
-		defer rows.Close()
-	}
-	if err != nil {
+func getUserApp(appId, uid string) (*userapp, error) {
+	row := db.MySQL.QueryRow(SelectAppUser, appId, uid)
+	userapp := userapp{}
+
+	if err := row.Scan(&userapp.Id, &userapp.AppId, &userapp.UId, &userapp.Follow); err != nil {
 		logger.Error(err)
-		return false
+
+		return nil, err
 	}
-	if !rows.Next() { //不存在记录才添加
+
+	return &userapp, nil
+}
+
+/*保存apnstoken证书*/
+func insertUserApp(userApp *userapp) bool {
+	userapp, _ := getUserApp(userApp.AppId, userApp.UId)
+	if nil == userapp {
 		tx, err := db.MySQL.Begin()
 		if err != nil {
 			logger.Error(err)

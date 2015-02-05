@@ -50,6 +50,8 @@ func StartHTTP() {
 	appAppServeMux.HandleFunc("/app/client/device/setSessionState", app.SessionStat)
 	appAppServeMux.HandleFunc("/app/client/device/getApplicationList", app.Device.GetApplicationList)
 	appAppServeMux.HandleFunc("/app/client/device/getAppOperationList", app.Device.GetAppOperationList)
+	appAppServeMux.HandleFunc("/app/client/device/user/followApp", app.Device.UserFollowApp)
+	appAppServeMux.HandleFunc("/app/client/device/user/unFollowApp", app.Device.UserUnFollowApp)
 	appAppServeMux.HandleFunc("/app/client/device/getUserAvatar", app.Device.GetUserAvatar)
 	appAppServeMux.HandleFunc("/app/client/device/setUserAvatar", app.Device.SetUserAvatar)
 	appAppServeMux.HandleFunc("/app/client/device/setUserInfo", app.Device.SetUserInfo)
@@ -63,8 +65,6 @@ func StartHTTP() {
 	appAppServeMux.HandleFunc("/app/client/app/getSessions", app.App.GetSession)
 
 	appAppServeMux.HandleFunc("/app/client/app/user/auth", app.App.UserAuth)
-	appAppServeMux.HandleFunc("/app/client/app/user/fllowApp", app.App.UserFllowApp)
-	appAppServeMux.HandleFunc("/app/client/app/user/unFllowApp", app.App.UserUnFllowApp)
 	appAppServeMux.HandleFunc("/app/client/app/getOrgUserList", app.App.GetOrgUserList)
 	appAppServeMux.HandleFunc("/app/client/app/getOrgList", app.App.GetOrgList)
 	appAppServeMux.HandleFunc("/app/client/app/addOrgUser", app.App.AddOrgUser)
