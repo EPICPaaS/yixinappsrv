@@ -40,6 +40,7 @@ type member struct {
 	Area        string    `json:"area"`
 	Description string    `json:"description"`
 	OrgName     string    `json:"orgName"`
+	Fllow       string    `json:"follow"`
 }
 type Tenant struct {
 	Id         string    `json:"id"`
@@ -337,7 +338,6 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 		toUser.Status = strconv.Itoa(app.Status)
 		toUser.Sort = app.Sort
 		toUser.Avatar = app.Avatar
-		toUser.TenantId = app.TenantId
 		toUser.PYInitial = app.PYInitial
 		toUser.PYQuanPin = app.PYQuanPin
 		toUser.Description = app.Description

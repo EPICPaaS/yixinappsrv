@@ -2,7 +2,10 @@ package app
 
 import (
 	//"database/sql"
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"github.com/EPICPaaS/go-uuid/uuid"
 	"github.com/EPICPaaS/yixinappsrv/db"
 	"io/ioutil"
 	"net/http"
@@ -14,13 +17,19 @@ const (
 	// 根据 id 查询应用记录.
 	SelectApplicationById = "SELECT  * FROM `application` WHERE `id` = ?"
 	// 查询应用记录.
-	SelectAllApplication = "SELECT `id`, `name`, `name`,`status`, `sort`,`avatar`, `tenant_id`, `name_py`, `name_quanpin` ,`description` FROM `application`"
+	SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF(a.fllow = '1','1','0') as fllow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
 	// 根据 token 获取应用记录.
 	SelectApplicationByToken = "SELECT * FROM `application` WHERE `token` = ?"
 	//根据应用ID查询应用操作项列表
 	SelectAppOpertionByAppId = "SELECT  `id`, `app_id`, `content`,`action`, `operation_type`,`sort`   FROM `operation` WHERE `app_id` = ?  and  parent_id  is  null  order by  sort "
 	//根据操作项父ID查询应用操作项列表
 	SelectAppOpertionByParentId = "SELECT `id`, `app_id`, `content`,`action`, `operation_type`,`sort`  FROM `operation` WHERE `parent_id` = ?  order by  sort "
+	//插入用户关注的应用
+	InsertAppUser = "INSERT INTO `app_user`(`id`,`appid`,`uid`,`fllow`) VALUES(?,?,?,'1')"
+	//删除用户关注应用信息
+	DeleteAppUser = "DELETE FROM app_user where appid = ?  and uid = ? "
+	//查询用户是否关注该企业号
+	SelectAppUser = "SELECT `id`,`appid`,`uid`,`fllow` FROM `app_user` where appid = ?  and uid = ? "
 )
 
 // 应用结构.
@@ -33,7 +42,7 @@ type application struct {
 	Sort        int       `json:"sort"`
 	Level       int       `json:"level"`
 	Avatar      string    `json:"avatar"`
-	TenantId    string    `json:tenantId`
+	TenantId    string    `json:"tenantId"`
 	Created     time.Time `json:"created"`
 	Updated     time.Time `json:"updated"`
 	PYInitial   string    `json:"pYInitial"`
@@ -51,6 +60,13 @@ type operation struct {
 	Sort          int    `json:"sort"`
 
 	OpertionList []*operation `json:"operationList"`
+}
+
+// 用户关注的应用
+type UserApp struct {
+	Id    string `json:"id"`
+	AppId string `json:"appId"`
+	UId   string `json:"uid"`
 }
 
 // 根据 id 查询应用记录.
@@ -74,8 +90,8 @@ func getApplication(appId string) (*application, error) {
 	return &application, nil
 }
 
-func getAllApplication() ([]*member, error) {
-	rows, _ := db.MySQL.Query(SelectAllApplication)
+func getAllApplication(tenantId, uid string) ([]*member, error) {
+	rows, _ := db.MySQL.Query(SelectAllApplication, tenantId, uid)
 	if rows != nil {
 		defer rows.Close()
 	}
@@ -83,7 +99,7 @@ func getAllApplication() ([]*member, error) {
 	for rows.Next() {
 		rec := member{}
 
-		if err := rows.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Sort, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Description); err != nil {
+		if err := rows.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Sort, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Description, &rec.Fllow); err != nil {
 			logger.Error(err)
 
 			return nil, err
@@ -193,8 +209,7 @@ func (*device) GetApplicationList(w http.ResponseWriter, r *http.Request) {
 		baseRes.ErrMsg = "会话超时请重新登录"
 		return
 	}
-
-	members, err := getAllApplication()
+	members, err := getAllApplication(user.TenantId, user.Uid)
 	if err != nil {
 		baseRes.ErrMsg = err.Error()
 		baseRes.Ret = InternalErr
@@ -263,4 +278,213 @@ func (*device) GetAppOperationList(w http.ResponseWriter, r *http.Request) {
 
 	res["operationList"] = opertions
 	res["operationCount"] = len(opertions)
+}
+
+/*用户关注应用*/
+func (*app) UserFllowApp(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method Not Allowed", 405)
+		return
+	}
+	baseRes := baseResponse{OK, ""}
+	body := ""
+	res := map[string]interface{}{"baseResponse": &baseRes}
+	defer RetPWriteJSON(w, r, res, &body, time.Now())
+
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		res["ret"] = ParamErr
+		logger.Errorf("ioutil.ReadAll() failed (%s)", err.Error())
+		return
+	}
+	body = string(bodyBytes)
+
+	var args map[string]interface{}
+
+	if err := json.Unmarshal(bodyBytes, &args); err != nil {
+		baseRes.ErrMsg = err.Error()
+		baseRes.Ret = ParamErr
+		return
+	}
+
+	baseReq := args["baseRequest"].(map[string]interface{})
+	token := baseReq["token"].(string)
+	//应用校验
+	user := getUserByToken(token)
+	if nil == user {
+		baseRes.Ret = AuthErr
+
+		return
+	}
+
+	appName := args["appname"].(string) //1@app
+	if !strings.HasSuffix(appName, APP_SUFFIX) {
+		baseRes.Ret = AuthErr
+		baseRes.ErrMsg = "appname is error format"
+		return
+	}
+
+	appId := appName[:strings.Index(appName, "@")]
+	userApp := &UserApp{
+		AppId: appId,
+		UId:   user.Uid,
+	}
+	application, _ := getApplication(appId)
+
+	if insertUserApp(userApp) {
+		//发送一条应用消息告知用户关注了该应用
+
+		data := []byte(`{
+				"baseRequest":{"token":"` + application.Token + `"},
+				"msgType":103 ,
+				"content":"感谢你关注了` + application.Name + `" ,
+				"toUserNames":["` + user.Uid + USER_SUFFIX + `"],
+				"objectContent":{"appId":"` + appId + `" , "content":"非常感谢你关注了` + application.Name + `"},
+				"expire":3600
+			}`)
+		body := bytes.NewReader(data)
+		fmt.Printf("%s", string(data[:]))
+		appPush := "http://" + Conf.AppPush[0] + "/app/client/app/user/push"
+		http.Post(appPush, "text/plain;charset=UTF-8", body) //不成功也不管了
+
+		baseRes.Ret = OK
+		baseRes.ErrMsg = "Save app user success"
+		return
+	} else {
+		baseRes.Ret = InternalErr
+		baseRes.ErrMsg = "Save app user faild"
+		return
+	}
+}
+
+/*用户取消关注应用*/
+func (*app) UserUnFllowApp(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != "POST" {
+		http.Error(w, "Method Not Allowed", 405)
+		return
+	}
+	baseRes := baseResponse{OK, ""}
+	body := ""
+	res := map[string]interface{}{"baseResponse": &baseRes}
+	defer RetPWriteJSON(w, r, res, &body, time.Now())
+
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		res["ret"] = ParamErr
+		logger.Errorf("ioutil.ReadAll() failed (%s)", err.Error())
+		return
+	}
+	body = string(bodyBytes)
+
+	var args map[string]interface{}
+
+	if err := json.Unmarshal(bodyBytes, &args); err != nil {
+		baseRes.ErrMsg = err.Error()
+		baseRes.Ret = ParamErr
+		return
+	}
+
+	baseReq := args["baseRequest"].(map[string]interface{})
+	token := baseReq["token"].(string)
+	//应用校验
+	user := getUserByToken(token)
+	if nil == user {
+		baseRes.Ret = AuthErr
+
+		return
+	}
+
+	appName := args["appname"].(string) //1@app
+	if !strings.HasSuffix(appName, APP_SUFFIX) {
+		baseRes.Ret = AuthErr
+		baseRes.ErrMsg = "appname is error format"
+		return
+	}
+
+	appId := appName[:strings.Index(appName, "@")]
+
+	if delUserApp(appId, user.Uid) {
+		/**
+			application, _ := getApplication(appId)
+				//发送一条应用消息告知用户取消关注了该应用
+				data := []byte(`{
+						"baseRequest":{"token":"` + application.Token + `"},
+						"msgType":103 ,
+						"content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用" ,
+						"toUserNames":["` + user.Uid + USER_SUFFIX + `"],
+						"objectContent":{"appId":"` + appId + `" , "content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用"},
+						"expire":3600
+					}`)
+				body := bytes.NewReader(data)
+				fmt.Printf("%s", string(data[:]))
+				appPush := "http://" + Conf.AppPush[0] + "/app/client/app/user/push"
+				http.Post(appPush, "text/plain;charset=UTF-8", body) //不成功也不管了
+		**/
+		baseRes.Ret = OK
+		baseRes.ErrMsg = "Delete app user success"
+		return
+	} else {
+		baseRes.Ret = InternalErr
+		baseRes.ErrMsg = "Delete app user faild"
+		return
+	}
+}
+
+/*保存apnstoken证书*/
+func insertUserApp(userApp *UserApp) bool {
+	rows, err := db.MySQL.Query(SelectAppUser, userApp.AppId, userApp.UId)
+	if rows != nil {
+		defer rows.Close()
+	}
+	if err != nil {
+		logger.Error(err)
+		return false
+	}
+	if !rows.Next() { //不存在记录才添加
+		tx, err := db.MySQL.Begin()
+		if err != nil {
+			logger.Error(err)
+			return false
+		}
+		_, err = tx.Exec(InsertAppUser, uuid.New(), userApp.AppId, userApp.UId)
+		if err != nil {
+			logger.Error(err)
+			if err := tx.Rollback(); err != nil {
+				logger.Error(err)
+			}
+			return false
+		}
+
+		if err := tx.Commit(); err != nil {
+			logger.Error(err)
+			return false
+		}
+	}
+	return true
+}
+
+func delUserApp(appId, uid string) bool {
+
+	tx, err := db.MySQL.Begin()
+	if err != nil {
+		logger.Error(err)
+		return false
+	}
+
+	_, err = tx.Exec(DeleteAppUser, appId, uid)
+	if err != nil {
+		logger.Error(err)
+		if err := tx.Rollback(); err != nil {
+			logger.Error(err)
+		}
+		return false
+	}
+
+	if err := tx.Commit(); err != nil {
+		logger.Error(err)
+		return false
+	}
+
+	return true
 }

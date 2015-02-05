@@ -47,6 +47,7 @@ type Config struct {
 	HttpBind             []string          `goconf:"base:http.bind:,"`
 	AdminBind            []string          `goconf:"base:admin.bind:,"`
 	AppBind              []string          `goconf:"base:app.bind:,"`
+	AppPush              []string          `goconf:"base:app.push:,"`
 	MaxProc              int               `goconf:"base:maxproc"`
 	PprofBind            []string          `goconf:"base:pprof.bind:,"`
 	User                 string            `goconf:"base:user"`
@@ -82,6 +83,8 @@ func InitConfig() error {
 	Conf = &Config{
 		HttpBind:             []string{"localhost:80"},
 		AdminBind:            []string{"localhost:81"},
+		AppBind:              []string{"localhost:8094"},
+		AppPush:              []string{"localhost:8093"},
 		MaxProc:              runtime.NumCPU(),
 		PprofBind:            []string{"localhost:8190"},
 		User:                 "nobody nobody",
