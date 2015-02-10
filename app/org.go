@@ -342,7 +342,12 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 		toUser.PYInitial = app.PYInitial
 		toUser.PYQuanPin = app.PYQuanPin
 		toUser.Description = app.Description
-		toUser.Follow = userapp.Follow
+		if nil == userapp {
+			toUser.Follow = "0"
+		} else {
+			toUser.Follow = userapp.Follow
+		}
+
 	}
 
 	if nil == toUser {
