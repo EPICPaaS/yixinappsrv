@@ -333,7 +333,8 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 		userapp, _ := getUserApp(app.Id, user.Uid)
 
 		toUser = &member{}
-		toUser.Uid = app.Id + APP_SUFFIX
+		toUser.Uid = app.Id
+		toUser.UserName = app.Id + APP_SUFFIX
 		toUser.Name = app.Name
 		toUser.NickName = app.Name
 		toUser.Status = strconv.Itoa(app.Status)
