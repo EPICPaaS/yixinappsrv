@@ -1,10 +1,13 @@
 package app
 
 import (
+	"crypto/md5"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/EPICPaaS/go-uuid/uuid"
 	"github.com/EPICPaaS/yixinappsrv/db"
+	"github.com/l2x/golang-chinese-to-pinyin"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -69,7 +72,7 @@ type ExternalInterface struct {
 //  3. 根据接口地址调用验证接口
 func loginAuth(username, password, customer_id string) (loginOk bool, user *member, sessionId string) {
 
-	// TODO: 旭东
+	// TODO:ghg
 	EI := GetExtInterface(customer_id, "login")
 	if EI != nil {
 		if EI.Owner == 0 { //自己的登录
@@ -81,12 +84,14 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 			}
 		} else {
 			/*用户可以输入手机和邮箱登录*/
-			u := GetUserByME(username)
-			if u == nil {
-				return false, nil, ""
-			}
+			//u := GetUserByME(username)
+			//if u == nil {
+			//	return false, nil, ""
+			//}
 			//logger.Info(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
-			res, err := http.Get(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
+
+			// yop
+			res, err := http.Get(EI.HttpUrl + "?code=" + username + "&pass=" + password)
 			if err != nil {
 				logger.Error(err)
 				return false, nil, ""
@@ -105,26 +110,65 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				return false, nil, ""
 			}
 			success, ok := respBody["succeed"].(bool)
+			logger.Infof("登陆结果：%v", respBody)
 			if ok && success {
-
-				sessionId = respBody["token"].(string)
 				userMap := respBody["data"].(map[string]interface{})
-				/*更新用户信息,不新增*/
 				uid := userMap["id"].(string)
-				user := getUserAndOrgNameByUid(uid)
+				sessionId = userMap["token"].(string)
+				//目前客户端不支持多租户，先取第一个租户为登陆租户
+				/*租户信息（用户属于多个租户）*/
+				tenantList := userMap["tenantList"].([]interface{})
 
-				logger.Info(uid)
-				user.Name = userMap["code"].(string)
-				user.NickName = userMap["name"].(string)
-				user.Password = userMap["password"].(string)
-				user.TenantId = userMap["idOrganization"].(string)
-				user.Email = userMap["lyncid"].(string)
+				var user *member
+				for _, tn := range tenantList {
+					tmp := tn.(map[string]interface{})
+					logger.Infof("同步租户：%v", tmp)
+
+					tenantId := tmp["id"].(string)
+
+					if isExistTennat(tenantId) {
+						tenantId = getTenantById(tenantId).Id
+					}
+
+					i, _ := strconv.Atoi(tmp["status"].(string))
+					tenant := &Tenant{
+						Id:         tenantId,
+						Code:       tmp["namespace"].(string), //命名空间为租户code
+						Name:       tmp["name"].(string),
+						Status:     i,
+						CustomerId: customer_id,
+						Created:    time.Now(),
+						Updated:    time.Now(),
+					}
+
+					if saveTennat(tenant) {
+						go syncRemoteOrg(tenant) //同步租户下的组织机构
+					}
+
+					//yop的uids是uid+tenantId取MD5值
+					logger.Infof("%s,%s\n", uid, tenantId) // 输出摘要结果
+					ret := GetMd5String(uid + tenantId)
+					logger.Infof("%s\n", ret) // 输出摘要结果
+
+					if nil == user {
+						user = getUserByUid(ret)
+					}
+
+				}
+
+				if nil == user {
+					return false, nil, ""
+				}
+				user.Name = userMap["name"].(string)
+				user.NickName = userMap["code"].(string)
+				user.Password = userMap["pass"].(string)
+				user.Email = userMap["email"].(string)
 				phone, ok := userMap["phone"].(string)
 
 				if ok && len(phone) > 0 {
 					user.Mobile = phone
 				}
-
+				logger.Infof("用户更新：%v", user)
 				if !updateMember(user) {
 					return false, nil, ""
 				}
@@ -136,6 +180,130 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 		}
 	}
 	return false, nil, ""
+}
+
+func GetMd5String(s string) string {
+	h := md5.New()
+	h.Write([]byte(s))
+	//cipherStr := h.Sum(nil)
+
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+/*
+同步远程租户下的组织机构
+*/
+func syncRemoteOrg(tenant *Tenant) {
+	//同步租户下的组织机构信息
+	EI := GetExtInterface(tenant.CustomerId, "getDeptAndUserTree")
+	res, err := http.Get(EI.HttpUrl + "?tenantId=" + tenant.Id)
+
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+
+	resBodyByte, err := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+	var respBody map[string]interface{}
+
+	if err := json.Unmarshal(resBodyByte, &respBody); err != nil {
+		logger.Errorf("convert to json failed (%s)", err.Error())
+		return
+	}
+	success, ok := respBody["succeed"].(bool)
+	if ok && success {
+		orgMapList := respBody["data"].([]interface{})
+		tx, rerr := db.MySQL.Begin()
+		recursionSaveOrUpdateOrg(tx, tenant, orgMapList)
+		if rerr != nil {
+			tx.Rollback()
+		} else {
+			err = tx.Commit()
+		}
+	}
+}
+
+/**第归插入机构**/
+
+func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface{}) {
+	for _, o := range orgMapList {
+		orgMap := o.(map[string]interface{})
+		org := &org{
+			ID:        orgMap["id"].(string),
+			Name:      orgMap["name"].(string),
+			ShortName: orgMap["name"].(string),
+			ParentId:  orgMap["parentId"].(string),
+			TenantId:  tenant.Id,
+			Location:  orgMap["location"].(string),
+		}
+		logger.Infof("同步机构：%v", org)
+		exists, parentId := isExists(org.ID)
+		if exists && parentId == org.ParentId {
+			updateOrg(org, tx)
+		} else if exists {
+			updateOrg(org, tx)
+			resetLocation(org, tx)
+		} else {
+			addOrg(org, tx)
+			resetLocation(org, tx)
+		}
+		//机构下的用户
+		userMapList := orgMap["rusers"]
+		if nil != userMapList {
+			for _, u := range userMapList.([]interface{}) {
+				memberMap := u.(map[string]interface{})
+				status := memberMap["status"].(string)
+				if status != "1" { //0未激活,1已激活
+					continue
+				}
+
+				uname := memberMap["name"].(string)
+				py := Pinyin.New()
+				py.Split = ""
+				py.Upper = false
+				p, _ := py.Convert(uname)
+
+				menberObj := &member{
+					Uid:       memberMap["id"].(string),
+					Name:      uname,
+					NickName:  memberMap["code"].(string),
+					PYInitial: p,
+					PYQuanPin: p,
+					Status:    status,
+					TenantId:  tenant.Id,
+				}
+				exists := isUserExists(menberObj.Uid)
+				logger.Infof("同步用户%v", menberObj)
+				if exists {
+					updateUser(menberObj, tx)
+				} else {
+					//新增
+					resFlag := addUser(menberObj)
+					//添加单位人员关系
+					if len(org.ID) > 0 {
+						if !isOrgUserExists(org.ID, menberObj.Uid) {
+							resFlag = addOrgUser(org.ID, menberObj.Uid)
+						}
+					}
+					if resFlag {
+						logger.Info("sysnUser  successed")
+					}
+				}
+			}
+		}
+
+		//第归插入
+		chirldrenOrgMapList := orgMap["chirldren"]
+		if nil != chirldrenOrgMapList {
+			recursionSaveOrUpdateOrg(tx, tenant, chirldrenOrgMapList.([]interface{}))
+		}
+
+	}
 }
 
 /*根据userId获取成员信息*/
@@ -333,7 +501,8 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 		userapp, _ := getUserApp(app.Id, user.Uid)
 
 		toUser = &member{}
-		toUser.Uid = app.Id + APP_SUFFIX
+		toUser.Uid = app.Id
+		toUser.UserName = app.Id + APP_SUFFIX
 		toUser.Name = app.Name
 		toUser.NickName = app.Name
 		toUser.Status = strconv.Itoa(app.Status)
@@ -1260,6 +1429,33 @@ func isUserExists(id string) bool {
 	}
 
 	row, err := smt.Query(id)
+	if row != nil {
+		defer row.Close()
+	} else {
+		return false
+	}
+
+	for row.Next() {
+		return true
+	}
+
+	return false
+}
+
+/*通过userId判断该用户是否存在*/
+func isOrgUserExists(orgId, uid string) bool {
+	smt, err := db.MySQL.Prepare("select 1 from org_user where  org_id = ? and user_id=?  ")
+	if smt != nil {
+		defer smt.Close()
+	} else {
+		return false
+	}
+
+	if err != nil {
+		return false
+	}
+
+	row, err := smt.Query(orgId, uid)
 	if row != nil {
 		defer row.Close()
 	} else {
