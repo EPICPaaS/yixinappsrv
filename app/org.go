@@ -317,7 +317,6 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 
 	userName := args["userName"].(string)
 	uid := userName[:strings.LastIndex(userName, "@")]
-
 	var toUser *member
 	if strings.HasSuffix(userName, USER_SUFFIX) { //用户
 
@@ -343,6 +342,8 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 		toUser.PYInitial = app.PYInitial
 		toUser.PYQuanPin = app.PYQuanPin
 		toUser.Description = app.Description
+		//logger.Infof("%v \n", toUser)
+
 		if nil == userapp {
 			toUser.Follow = "0"
 		} else {
