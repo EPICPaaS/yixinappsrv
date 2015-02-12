@@ -159,10 +159,13 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				if nil == user {
 					return false, nil, ""
 				}
-				user.Name = userMap["name"].(string)
-				user.NickName = userMap["code"].(string)
+				orgRet := getOrgListByUserId(user.Uid)
+				user.OrgName = orgRet[0].Name
+				user.Name = userMap["code"].(string)
+				user.NickName = userMap["name"].(string)
 				user.Password = userMap["pass"].(string)
 				user.Email = userMap["email"].(string)
+				user.Avatar = userMap["icon"].(string)
 				phone, ok := userMap["phone"].(string)
 
 				if ok && len(phone) > 0 {
@@ -233,11 +236,16 @@ func syncRemoteOrg(tenant *Tenant) {
 func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface{}) {
 	for _, o := range orgMapList {
 		orgMap := o.(map[string]interface{})
+		tpid := orgMap["parentId"].(string)
+		if tpid == "-1" {
+			tpid = ""
+		}
+
 		org := &org{
 			ID:        orgMap["id"].(string),
 			Name:      orgMap["name"].(string),
 			ShortName: orgMap["name"].(string),
-			ParentId:  orgMap["parentId"].(string),
+			ParentId:  tpid,
 			TenantId:  tenant.Id,
 			Location:  orgMap["location"].(string),
 		}
@@ -270,8 +278,9 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 
 				menberObj := &member{
 					Uid:       memberMap["id"].(string),
-					Name:      uname,
-					NickName:  memberMap["code"].(string),
+					UserName:  memberMap["id"].(string) + USER_SUFFIX,
+					Name:      memberMap["code"].(string),
+					NickName:  uname,
 					PYInitial: p,
 					PYQuanPin: p,
 					Status:    status,
