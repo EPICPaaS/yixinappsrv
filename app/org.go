@@ -164,8 +164,14 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				user.Name = userMap["code"].(string)
 				user.NickName = userMap["name"].(string)
 				user.Password = userMap["pass"].(string)
-				user.Email = userMap["email"].(string)
-				user.Avatar = userMap["icon"].(string)
+				email := userMap["email"]
+				if nil != email {
+					user.Email = email.(string)
+				}
+				icon := userMap["icon"]
+				if nil != icon {
+					user.Avatar = icon.(string)
+				}
 				phone, ok := userMap["phone"].(string)
 
 				if ok && len(phone) > 0 {
