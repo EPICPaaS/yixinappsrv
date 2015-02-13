@@ -619,7 +619,7 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 
 	res["uid"] = member.Uid
 
-	token, err := genToken(member.Uid, sessionId)
+	token, err := genToken(member.TenantId, sessionId)
 	if nil != err {
 		logger.Error(err)
 

@@ -134,7 +134,7 @@ func getUserByToken(token string) *member {
 }
 
 // 令牌生成.
-func genToken(uid, sessionId string) (string, error) {
+func genToken(tenantId, sessionId string) (string, error) {
 	conn := rs.getConn("token")
 
 	if conn == nil {
@@ -148,7 +148,8 @@ func genToken(uid, sessionId string) (string, error) {
 	if len(sessionId) == 0 {
 		sessionId = uuid.New()
 	}
-	token := uid + "_" + sessionId
+
+	token := getTenantById(tenantId).Code + "_" + sessionId
 
 	// 使用 Redis Hash 结构保存用户令牌值
 	if err := conn.Send("HSET", token, "expire", expire); err != nil {
