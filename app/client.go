@@ -348,12 +348,12 @@ func (*device) AddApnsToken(w http.ResponseWriter, r *http.Request) {
 			baseRes.Ret = OK
 			baseRes.ErrMsg = "Save apns_token success"
 			return
-		} else {
-			baseRes.Ret = InternalErr
-			baseRes.ErrMsg = "Save apns_token faild"
-			return
 		}
 	}
+
+	baseRes.Ret = InternalErr
+	baseRes.ErrMsg = "Save apns_token faild"
+	return
 }
 
 /* 删除指定ApnsToken*/
@@ -402,14 +402,13 @@ func (*device) DelApnsToken(w http.ResponseWriter, r *http.Request) {
 		//删除对应用户的 APNSTOKEN
 		if deleteApnsTokenByUid(apnsTokenStr, user.Uid) {
 			baseRes.Ret = OK
-			baseRes.ErrMsg = "Save apns_token success"
-			return
-		} else {
-			baseRes.Ret = InternalErr
-			baseRes.ErrMsg = "Save apns_token faild"
+			baseRes.ErrMsg = "Delete apns_token success"
 			return
 		}
 	}
+	baseRes.Ret = InternalErr
+	baseRes.ErrMsg = "Delete apns_token faild"
+	return
 }
 
 // 在数据库中查询指定类型客户端的最新的版本.

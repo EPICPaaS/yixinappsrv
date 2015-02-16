@@ -619,7 +619,7 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 
 	res["uid"] = member.Uid
 
-	token, err := genToken(member.TenantId, sessionId)
+	token, err := genToken(member, sessionId)
 	if nil != err {
 		logger.Error(err)
 
@@ -2060,7 +2060,7 @@ func (*app) UserAuth(w http.ResponseWriter, r *http.Request) {
 	uid := args["uid"].(string)
 	//用户校验
 	mem := getUserByToken(token)
-
+	logger.Infof("%v", mem)
 	if nil == mem {
 		baseRes.Ret = AuthErr
 		baseRes.ErrMsg = "auth failure"

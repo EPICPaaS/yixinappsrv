@@ -17,7 +17,7 @@ const (
 	// 根据 id 查询应用记录.
 	SelectApplicationById = "SELECT  * FROM `application` WHERE `id` = ?"
 	// 查询应用记录.
-	SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF(a.follow = '1','1','0') as fllow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
+	SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF( isnull(a.follow) ,t.follow,a.follow)  as follow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
 	// 根据 token 获取应用记录.
 	SelectApplicationByToken = "SELECT * FROM `application` WHERE `token` = ?"
 	//根据应用ID查询应用操作项列表
@@ -48,6 +48,7 @@ type application struct {
 	PYInitial   string    `json:"pYInitial"`
 	PYQuanPin   string    `json:"pYQuanPin"`
 	Description string    `json:"description"`
+	Follow      string    `json:"follow"`
 }
 
 // 应用操作项
@@ -77,7 +78,7 @@ func getApplication(appId string) (*application, error) {
 	application := application{}
 
 	if err := row.Scan(&application.Id, &application.Name, &application.Token, &application.Type, &application.Status,
-		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description); err != nil {
+		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description, &application.Follow); err != nil {
 		logger.Error(err)
 
 		return nil, err
@@ -160,7 +161,7 @@ func getApplicationByToken(token string) (*application, error) {
 	application := application{}
 
 	if err := row.Scan(&application.Id, &application.Name, &application.Token, &application.Type, &application.Status,
-		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description); err != nil {
+		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description, &application.Follow); err != nil {
 		logger.Error(err)
 
 		return nil, err
