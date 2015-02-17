@@ -25,9 +25,9 @@ const (
 	//根据操作项父ID查询应用操作项列表
 	SelectAppOpertionByParentId = "SELECT `id`, `app_id`, `content`,`action`, `operation_type`,`sort`  FROM `operation` WHERE `parent_id` = ?  order by  sort "
 	//插入用户关注的应用
-	InsertAppUser = "INSERT INTO `app_user`(`id`,`appid`,`uid`,`follow`) VALUES(?,?,?,'1')"
+	InsertAppUser = "INSERT INTO `app_user`(`id`,`appid`,`uid`,`follow`) VALUES(?,?,?,?)"
 	//删除用户关注应用信息
-	DeleteAppUser = "DELETE FROM app_user where appid = ?  and uid = ? "
+	UpdateAppUser = "UPDATE  app_user  set follow = ?  where id = ? "
 	//查询用户是否关注该企业号
 	SelectAppUser = "SELECT `id`,`appid`,`uid`,`follow` FROM `app_user` where appid = ?  and uid = ? "
 )
@@ -328,14 +328,14 @@ func (*device) UserFollowApp(w http.ResponseWriter, r *http.Request) {
 
 	appId := appName[:strings.Index(appName, "@")]
 	userApp := &userapp{
-		AppId: appId,
-		UId:   user.Uid,
+		AppId:  appId,
+		UId:    user.Uid,
+		Follow: "1",
 	}
-	application, _ := getApplication(appId)
 
 	if insertUserApp(userApp) {
 		//发送一条应用消息告知用户关注了该应用
-
+		application, _ := getApplication(appId)
 		data := []byte(`{
 				"baseRequest":{"token":"` + application.Token + `"},
 				"msgType":103 ,
@@ -406,7 +406,13 @@ func (*device) UserUnFollowApp(w http.ResponseWriter, r *http.Request) {
 
 	appId := appName[:strings.Index(appName, "@")]
 
-	if delUserApp(appId, user.Uid) {
+	userApp := &userapp{
+		AppId:  appId,
+		UId:    user.Uid,
+		Follow: "0",
+	}
+
+	if insertUserApp(userApp) {
 		/**
 			application, _ := getApplication(appId)
 				//发送一条应用消息告知用户取消关注了该应用
@@ -446,7 +452,6 @@ func getUserApp(appId, uid string) (*userapp, error) {
 	return &userapp, nil
 }
 
-/*保存apnstoken证书*/
 func insertUserApp(userApp *userapp) bool {
 	userapp, _ := getUserApp(userApp.AppId, userApp.UId)
 	if nil == userapp {
@@ -455,7 +460,26 @@ func insertUserApp(userApp *userapp) bool {
 			logger.Error(err)
 			return false
 		}
-		_, err = tx.Exec(InsertAppUser, uuid.New(), userApp.AppId, userApp.UId)
+		_, err = tx.Exec(InsertAppUser, uuid.New(), userApp.AppId, userApp.UId, userApp.Follow)
+		if err != nil {
+			logger.Error(err)
+			if err := tx.Rollback(); err != nil {
+				logger.Error(err)
+			}
+			return false
+		}
+
+		if err := tx.Commit(); err != nil {
+			logger.Error(err)
+			return false
+		}
+	} else {
+		tx, err := db.MySQL.Begin()
+		if err != nil {
+			logger.Error(err)
+			return false
+		}
+		_, err = tx.Exec(UpdateAppUser, userApp.Follow, userapp.Id)
 		if err != nil {
 			logger.Error(err)
 			if err := tx.Rollback(); err != nil {
@@ -469,30 +493,5 @@ func insertUserApp(userApp *userapp) bool {
 			return false
 		}
 	}
-	return true
-}
-
-func delUserApp(appId, uid string) bool {
-
-	tx, err := db.MySQL.Begin()
-	if err != nil {
-		logger.Error(err)
-		return false
-	}
-
-	_, err = tx.Exec(DeleteAppUser, appId, uid)
-	if err != nil {
-		logger.Error(err)
-		if err := tx.Rollback(); err != nil {
-			logger.Error(err)
-		}
-		return false
-	}
-
-	if err := tx.Commit(); err != nil {
-		logger.Error(err)
-		return false
-	}
-
 	return true
 }

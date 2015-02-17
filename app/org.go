@@ -175,7 +175,8 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				phone, ok := userMap["phone"].(string)
 
 				if ok && len(phone) > 0 {
-					user.Mobile = phone
+					//暂时不同步电话
+					//user.Mobile = phone
 				}
 				logger.Infof("用户更新：%v", user)
 				if !updateMember(user) {
@@ -282,22 +283,34 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 				py.Upper = false
 				p, _ := py.Convert(uname)
 
-				menberObj := &member{
-					Uid:       memberMap["id"].(string),
-					UserName:  memberMap["id"].(string) + USER_SUFFIX,
-					Name:      memberMap["code"].(string),
-					NickName:  uname,
-					PYInitial: p,
-					PYQuanPin: p,
-					Status:    status,
-					TenantId:  tenant.Id,
-				}
-				exists := isUserExists(menberObj.Uid)
-				logger.Infof("同步用户%v", menberObj)
+				uid := memberMap["id"].(string)
+				userNmae := memberMap["id"].(string) + USER_SUFFIX
+				name := memberMap["code"].(string)
+
+				logger.Infof("同步用户%v", memberMap)
+				exists := isUserExists(uid)
 				if exists {
-					updateUser(menberObj, tx)
+					m := getUserByUid(uid)
+					m.UserName = userNmae
+					m.Name = name
+					m.PYInitial = p
+					m.PYQuanPin = p
+					m.Status = status
+					m.TenantId = tenant.Id
+					updateUser(m, tx)
 				} else {
 					//新增
+					menberObj := &member{
+						Uid:       uid,
+						UserName:  userNmae,
+						Name:      name,
+						NickName:  uname,
+						PYInitial: p,
+						PYQuanPin: p,
+						Status:    status,
+						TenantId:  tenant.Id,
+					}
+
 					resFlag := addUser(menberObj)
 					//添加单位人员关系
 					if len(org.ID) > 0 {
@@ -527,7 +540,7 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 		toUser.PYQuanPin = app.PYQuanPin
 		toUser.Description = app.Description
 		if nil == userapp {
-			toUser.Follow = "0"
+			toUser.Follow = app.Follow
 		} else {
 			toUser.Follow = userapp.Follow
 		}
