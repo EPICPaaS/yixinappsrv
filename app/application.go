@@ -4,7 +4,7 @@ import (
 	//"database/sql"
 	"bytes"
 	"encoding/json"
-	"fmt"
+	//"fmt"
 	"github.com/EPICPaaS/go-uuid/uuid"
 	"github.com/EPICPaaS/yixinappsrv/db"
 	"io/ioutil"
@@ -345,9 +345,9 @@ func (*device) UserFollowApp(w http.ResponseWriter, r *http.Request) {
 				"expire":3600
 			}`)
 		body := bytes.NewReader(data)
-		fmt.Printf("%s", string(data[:]))
 		appPush := "http://" + Conf.AppPush[0] + "/app/client/app/user/push"
 		http.Post(appPush, "text/plain;charset=UTF-8", body) //不成功也不管了
+		logger.Infof("%s,%s", Conf.AppPush[0], string(data[:]))
 
 		baseRes.Ret = OK
 		baseRes.ErrMsg = "Save app user success"

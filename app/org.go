@@ -152,15 +152,59 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 
 					if nil == user {
 						user = getUserByUid(ret)
+						if nil != user {
+							orgRet := getOrgListByUserId(user.Uid)
+							if len(orgRet) > 0 {
+								user.OrgName = orgRet[0].Name
+							} else {
+								user.OrgName = tenant.Name
+							}
+
+						}
+					}
+
+					logger.Infof("---> %v", user)
+					if nil == user { //用户并没有分配到单位中，直接挂在根下
+
+						uname := userMap["name"].(string)
+						py := Pinyin.New()
+						py.Split = ""
+						py.Upper = false
+						p, _ := py.Convert(uname)
+
+						userNmae := ret + USER_SUFFIX
+						name := userMap["code"].(string)
+
+						exists := isUserExists(ret)
+						if !exists {
+							//新增
+							user = &member{
+								Uid:       ret,
+								UserName:  userNmae,
+								Name:      name,
+								NickName:  uname,
+								PYInitial: p,
+								PYQuanPin: p,
+								Status:    "1",
+								TenantId:  tenantId,
+							}
+
+							resFlag := addUser(user)
+							//添加单位人员关系
+							if len(tenantId) > 0 {
+								if !isOrgUserExists(tenantId, user.Uid) {
+									resFlag = addOrgUser(tenantId, user.Uid)
+								}
+							}
+							if resFlag {
+								logger.Info("sysnTenantUser  successed")
+							}
+						}
+						user.OrgName = tenant.Name
 					}
 
 				}
 
-				if nil == user {
-					return false, nil, ""
-				}
-				orgRet := getOrgListByUserId(user.Uid)
-				user.OrgName = orgRet[0].Name
 				user.Name = userMap["code"].(string)
 				user.NickName = userMap["name"].(string)
 				user.Password = userMap["pass"].(string)
@@ -183,6 +227,8 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 					return false, nil, ""
 				}
 				//登录成功
+				user.Avatar = strings.Replace(user.Avatar, ",", "/", 1)
+				user.Avatar = "http://" + Conf.WeedfsAddr + "/" + user.Avatar
 				return true, user, sessionId
 			} else {
 				return false, nil, ""
@@ -709,10 +755,47 @@ func getUserListByTenantId(id string) members {
 	return ret
 }
 
-/*根据单位id（TenantId）获取成员*/
+/*根据单位id（orgId）获取成员*/
 func getUserListByOrgId(id, currentId string) members {
 
 	smt, err := db.MySQL.Prepare("select `user`.`id`, `user`.`name`, `user`.`nickname`, `user`.`status`, `user`.`avatar`, `user`.`tenant_id`, `email`,`user`.`name_py`, `user`.`name_quanpin`, `user`.`mobile`, `user`.`tel`, `user`.`area`,`org_user`.`sort`	,`org`.`name` as org_name from `user`,`org_user` ,`org` where `user`.`id`=`org_user`.`user_id` and `org_user`.`org_id` =`org`.`id`  and org_id=? AND `user`.id != ? ")
+	if smt != nil {
+		defer smt.Close()
+	} else {
+		return nil
+	}
+
+	if err != nil {
+		return nil
+	}
+
+	row, err := smt.Query(id, currentId)
+	if row != nil {
+		defer row.Close()
+	} else {
+		return nil
+	}
+	ret := members{}
+	for row.Next() {
+		rec := new(member)
+		err = row.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Avatar, &rec.TenantId, &rec.Email, &rec.PYInitial, &rec.PYQuanPin, &rec.Mobile, &rec.Tel, &rec.Area, &rec.Sort, &rec.OrgName)
+		if err != nil {
+			logger.Error(err)
+		}
+		rec.UserName = rec.Uid + USER_SUFFIX
+		if len(rec.Avatar) > 0 {
+			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+		}
+		ret = append(ret, rec)
+	}
+	return ret
+}
+
+/*根据单位id（orgId）获取成员*/
+func getTenantUserListByTenantId(id, currentId string) members {
+
+	smt, err := db.MySQL.Prepare("select `user`.`id`, `user`.`name`, `user`.`nickname`, `user`.`status`, `user`.`avatar`, `user`.`tenant_id`, `email`,`user`.`name_py`, `user`.`name_quanpin`, `user`.`mobile`, `user`.`tel`, `user`.`area`,`org_user`.`sort`	,`tenant`.`name` as org_name from `user`,`org_user` ,`tenant` where `user`.`id`=`org_user`.`user_id` and `org_user`.`org_id` =`tenant`.`id`  and org_id=? AND `user`.id != ? ")
 	if smt != nil {
 		defer smt.Close()
 	} else {
@@ -781,6 +864,10 @@ func (*device) GetOrgUserList(w http.ResponseWriter, r *http.Request) {
 
 	orgId := input["orgid"].(string)
 	memberList := getUserListByOrgId(orgId, user.Uid)
+	if len(memberList) == 0 { //用户未分配组织，直接在租户下
+		logger.Infof("%v ,%v", orgId, user.Uid)
+		memberList = getTenantUserListByTenantId(orgId, user.Uid)
+	}
 	res["memberCount"] = len(memberList)
 	res["memberList"] = memberList
 }

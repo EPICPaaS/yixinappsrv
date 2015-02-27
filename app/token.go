@@ -148,7 +148,7 @@ func genToken(m *member, sessionId string) (string, error) {
 		sessionId = uuid.New()
 	}
 
-	token := m.Uid + "_" + getTenantById(m.TenantId).Code + "_" + sessionId
+	token := m.Uid + "_" + m.TenantId + "_" + getTenantById(m.TenantId).Code + "_" + sessionId
 
 	// 使用 Redis Hash 结构保存用户令牌值
 	if err := conn.Send("HSET", token, "expire", expire); err != nil {
