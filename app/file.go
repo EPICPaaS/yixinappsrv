@@ -249,7 +249,7 @@ func (*device) SetUserAvatar(w http.ResponseWriter, r *http.Request) {
 		baseRes.ErrMsg = "Auth failure "
 		return
 	}
-
+	customer_id := baseReq["customer_id"].(string)
 	responseUpload := args["responseUpload"].(map[string]interface{})
 	userName := args["userName"].(string)
 
@@ -258,6 +258,11 @@ func (*device) SetUserAvatar(w http.ResponseWriter, r *http.Request) {
 	if !saveAvatar(userName, fileId+"/."+fileSuffix) {
 		baseRes.Ret = InternalErr
 		return
+	}
+	//调有YOP接口，更新用户头像
+	if strings.HasSuffix(userName, USER_SUFFIX) {
+		EI := GetExtInterface(customer_id, "saveUser")
+		http.Get(EI.HttpUrl + "?id=" + user.Uid + "&icon=" + fileId)
 	}
 
 }
@@ -311,7 +316,10 @@ func saveAvatar(userName, avatar string) bool {
 
 	//删除旧头像文件
 	if len(oldAvatar) != 0 {
-		fileId := oldAvatar[:strings.Index(oldAvatar, "/")]
+		fileId := oldAvatar
+		if strings.Contains(oldAvatar, "/") {
+			fileId = oldAvatar[:strings.Index(oldAvatar, "/")]
+		}
 		if !DeleteFile(fileId) {
 			logger.Errorf("delete file fail , file id is %s", fileId)
 		}

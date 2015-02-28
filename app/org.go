@@ -220,7 +220,7 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 
 				if ok && len(phone) > 0 {
 					//暂时不同步电话
-					//user.Mobile = phone
+					user.Mobile = phone
 				}
 				logger.Infof("用户更新：%v", user)
 				if !updateMember(user) {
@@ -332,6 +332,8 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 				uid := memberMap["id"].(string)
 				userNmae := memberMap["id"].(string) + USER_SUFFIX
 				name := memberMap["code"].(string)
+				mobile, _ := memberMap["phone"].(string)
+				email, _ := memberMap["email"].(string)
 
 				logger.Infof("同步用户%v", memberMap)
 				exists := isUserExists(uid)
@@ -342,6 +344,13 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 					m.PYInitial = p
 					m.PYQuanPin = p
 					m.Status = status
+					if len(mobile) > 0 {
+						m.Mobile = mobile
+					}
+					if len(email) > 0 {
+						m.Email = email
+					}
+
 					m.TenantId = tenant.Id
 					updateUser(m, tx)
 				} else {
@@ -353,6 +362,8 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 						NickName:  uname,
 						PYInitial: p,
 						PYQuanPin: p,
+						Mobile:    mobile,
+						Email:     email,
 						Status:    status,
 						TenantId:  tenant.Id,
 					}
@@ -2239,6 +2250,7 @@ func (*device) SetUserInfo(w http.ResponseWriter, r *http.Request) {
 		baseRes.ErrMsg = "会话超时请重新登录"
 		return
 	}
+	customer_id := baseReq["customer_id"].(string)
 	user.Mobile = args["mobile"].(string)
 	user.Tel = args["tel"].(string)
 	if !setUserInfo(user) {
@@ -2246,6 +2258,9 @@ func (*device) SetUserInfo(w http.ResponseWriter, r *http.Request) {
 		baseRes.ErrMsg = "set userinfo fail"
 		return
 	}
+	//调有yop接口，更新电话
+	EI := GetExtInterface(customer_id, "saveUser")
+	http.Get(EI.HttpUrl + "?id=" + user.Uid + "&phone=" + user.Mobile)
 }
 
 /*用户只能设置电话和座机*/
