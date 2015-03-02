@@ -142,7 +142,10 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 					}
 
 					if saveTennat(tenant) {
-						go syncRemoteOrg(tenant) //同步租户下的组织机构
+						//清除组织机构数据，然后添加
+						removeOrgByTenantId(tenant.Id)
+						//同步租户下的组织机构
+						go syncRemoteOrg(tenant)
 					}
 
 					//yop的uids是uid+tenantId取MD5值
@@ -153,6 +156,7 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 					if nil == user {
 						user = getUserByUid(ret)
 						if nil != user {
+							removeOrgUser(tenantId, user.Uid)
 							orgRet := getOrgListByUserId(user.Uid)
 							if len(orgRet) > 0 {
 								user.OrgName = orgRet[0].Name
@@ -160,47 +164,44 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 								user.OrgName = tenant.Name
 							}
 
-						}
-					}
+						} else {
+							//用户并没有分配到单位中，直接挂在根下
+							uname := userMap["name"].(string)
+							py := Pinyin.New()
+							py.Split = ""
+							py.Upper = false
+							p, _ := py.Convert(uname)
 
-					logger.Infof("---> %v", user)
-					if nil == user { //用户并没有分配到单位中，直接挂在根下
+							userNmae := ret + USER_SUFFIX
+							name := userMap["code"].(string)
 
-						uname := userMap["name"].(string)
-						py := Pinyin.New()
-						py.Split = ""
-						py.Upper = false
-						p, _ := py.Convert(uname)
+							exists := isUserExists(ret)
+							if !exists {
+								//新增
+								user = &member{
+									Uid:       ret,
+									UserName:  userNmae,
+									Name:      name,
+									NickName:  uname,
+									PYInitial: p,
+									PYQuanPin: p,
+									Status:    "1",
+									TenantId:  tenantId,
+								}
 
-						userNmae := ret + USER_SUFFIX
-						name := userMap["code"].(string)
-
-						exists := isUserExists(ret)
-						if !exists {
-							//新增
-							user = &member{
-								Uid:       ret,
-								UserName:  userNmae,
-								Name:      name,
-								NickName:  uname,
-								PYInitial: p,
-								PYQuanPin: p,
-								Status:    "1",
-								TenantId:  tenantId,
-							}
-
-							resFlag := addUser(user)
-							//添加单位人员关系
-							if len(tenantId) > 0 {
-								if !isOrgUserExists(tenantId, user.Uid) {
-									resFlag = addOrgUser(tenantId, user.Uid)
+								resFlag := addUser(user)
+								//添加单位人员关系
+								if len(tenantId) > 0 {
+									if !isOrgUserExists(tenantId, user.Uid) {
+										resFlag = addOrgUser(tenantId, user.Uid)
+									}
+								}
+								if resFlag {
+									logger.Info("sysnTenantUser  successed")
 								}
 							}
-							if resFlag {
-								logger.Info("sysnTenantUser  successed")
-							}
+							user.OrgName = tenant.Name
 						}
-						user.OrgName = tenant.Name
 					}
 
 				}
@@ -337,8 +338,10 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 
 				logger.Infof("同步用户%v", memberMap)
 				exists := isUserExists(uid)
+				var m *member
+
 				if exists {
-					m := getUserByUid(uid)
+					m = getUserByUid(uid)
 					m.UserName = userNmae
 					m.Name = name
 					m.PYInitial = p
@@ -355,7 +358,7 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 					updateUser(m, tx)
 				} else {
 					//新增
-					menberObj := &member{
+					m = &member{
 						Uid:       uid,
 						UserName:  userNmae,
 						Name:      name,
@@ -368,15 +371,18 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 						TenantId:  tenant.Id,
 					}
 
-					resFlag := addUser(menberObj)
-					//添加单位人员关系
-					if len(org.ID) > 0 {
-						if !isOrgUserExists(org.ID, menberObj.Uid) {
-							resFlag = addOrgUser(org.ID, menberObj.Uid)
-						}
-					}
+					resFlag := addUser(m)
 					if resFlag {
-						logger.Info("sysnUser  successed")
+						logger.Info("addUser  successed")
+					}
+				}
+				//添加单位人员关系
+				if len(org.ID) > 0 {
+					if !isOrgUserExists(org.ID, m.Uid) {
+						resFlag := addOrgUser(org.ID, m.Uid)
+						if resFlag {
+							logger.Info("addOrgUser  successed")
+						}
 					}
 				}
 			}
@@ -1075,6 +1081,35 @@ func (*app) RemoveOrgUser(w http.ResponseWriter, r *http.Request) {
 	userId := args["uid"].(string)
 	b := removeOrgUser(orgId, userId)
 	res["successed"] = b
+}
+
+func removeOrgByTenantId(tenantId string) bool {
+	tx, err := db.MySQL.Begin()
+
+	if err != nil {
+		logger.Error(err)
+
+		return false
+	}
+
+	_, err = tx.Exec("delete from org where  tenant_id = ?", tenantId)
+	if err != nil {
+		logger.Error(err)
+
+		if err := tx.Rollback(); err != nil {
+			logger.Error(err)
+		}
+
+		return false
+	}
+
+	if err := tx.Commit(); err != nil {
+		logger.Error(err)
+
+		return false
+	}
+
+	return true
 }
 
 func removeOrgUser(orgId, userId string) bool {
