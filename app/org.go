@@ -144,6 +144,9 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 					if saveTennat(tenant) {
 						//清除组织机构数据，然后添加
 						removeOrgByTenantId(tenant.Id)
+						//清除组织机构中的用户数据，然后添加
+						removeUserByTenantId(tenant.Id)
+
 						//同步租户下的组织机构
 						go syncRemoteOrg(tenant)
 					}
@@ -1112,6 +1115,35 @@ func removeOrgByTenantId(tenantId string) bool {
 	return true
 }
 
+func removeUserByTenantId(tenantId string) bool {
+	tx, err := db.MySQL.Begin()
+
+	if err != nil {
+		logger.Error(err)
+
+		return false
+	}
+
+	_, err = tx.Exec("delete from user  where  tenant_id = ?", tenantId)
+	if err != nil {
+		logger.Error(err)
+
+		if err := tx.Rollback(); err != nil {
+			logger.Error(err)
+		}
+
+		return false
+	}
+
+	if err := tx.Commit(); err != nil {
+		logger.Error(err)
+
+		return false
+	}
+
+	return true
+}
+
 func removeOrgUser(orgId, userId string) bool {
 	tx, err := db.MySQL.Begin()
 
@@ -1855,6 +1887,7 @@ func (*device) GetOrgInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	res["userOgnization"] = ""
 	for row.Next() {
 		userOgnization := ""
 		row.Scan(&userOgnization)
