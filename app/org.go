@@ -141,72 +141,64 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 						Updated:    time.Now(),
 					}
 
-					if saveTennat(tenant) {
-						//清除组织机构数据，然后添加
-						removeOrgByTenantId(tenant.Id)
-						//清除组织机构中的用户数据，然后添加
-						removeUserByTenantId(tenant.Id)
-
-						//同步租户下的组织机构
-						go syncRemoteOrg(tenant)
-					}
-
 					//yop的uids是uid+tenantId取MD5值
 					logger.Infof("%s,%s\n", uid, tenantId) // 输出摘要结果
 					ret := GetMd5String(uid + tenantId)
 					logger.Infof("%s\n", ret) // 输出摘要结果
 
-					if nil == user {
-						user = getUserByUid(ret)
-						if nil != user {
-							removeOrgUser(tenantId, user.Uid)
-							orgRet := getOrgListByUserId(user.Uid)
-							if len(orgRet) > 0 {
-								user.OrgName = orgRet[0].Name
-							} else {
-								user.OrgName = tenant.Name
-							}
-
+					user = getUserByUid(ret)
+					if nil != user {
+						orgRet := getOrgListByUserId(user.Uid)
+						if len(orgRet) > 0 {
+							removeOrgUser(tenant.Id, user.Uid)
+							user.OrgName = orgRet[0].Name
 						} else {
-							//用户并没有分配到单位中，直接挂在根下
-							uname := userMap["name"].(string)
-							py := Pinyin.New()
-							py.Split = ""
-							py.Upper = false
-							p, _ := py.Convert(uname)
-
-							userNmae := ret + USER_SUFFIX
-							name := userMap["code"].(string)
-
-							exists := isUserExists(ret)
-							if !exists {
-								//新增
-								user = &member{
-									Uid:       ret,
-									UserName:  userNmae,
-									Name:      name,
-									NickName:  uname,
-									PYInitial: p,
-									PYQuanPin: p,
-									Status:    "1",
-									TenantId:  tenantId,
-								}
-
-								resFlag := addUser(user)
-								//添加单位人员关系
-								if len(tenantId) > 0 {
-									if !isOrgUserExists(tenantId, user.Uid) {
-										resFlag = addOrgUser(tenantId, user.Uid)
-									}
-								}
-								if resFlag {
-									logger.Info("sysnTenantUser  successed")
-								}
-							}
 							user.OrgName = tenant.Name
 						}
-					}
+					} else {
+						//用户并没有分配到单位中，直接挂在根下
+						uname := userMap["name"].(string)
+						py := Pinyin.New()
+						py.Split = ""
+						py.Upper = false
+						p, _ := py.Convert(uname)
 
+						userNmae := ret + USER_SUFFIX
+						name := userMap["code"].(string)
+
+						exists := isUserExists(ret)
+						if !exists {
+							//新增
+							user = &member{
+								Uid:       ret,
+								UserName:  userNmae,
+								Name:      name,
+								NickName:  uname,
+								PYInitial: p,
+								PYQuanPin: p,
+								Status:    "1",
+								TenantId:  tenantId,
+							}
+
+							resFlag := addUser(user)
+							//添加单位人员关系
+							if len(tenantId) > 0 {
+								if !isOrgUserExists(tenantId, user.Uid) {
+									resFlag = addOrgUser(tenantId, user.Uid)
+								}
+							}
+							if resFlag {
+								logger.Info("sysnTenantUser  successed")
+							}
+						}
+						user.OrgName = tenant.Name
+					}
+					if saveTennat(tenant) {
+						//同步租户下的组织机构
+						removeTenant(tenant.Id)
+						//removeOrgUer(ret)
+						go syncRemoteOrg(tenant)
+					}
 				}
 
 				user.Name = userMap["code"].(string)
@@ -279,6 +271,7 @@ func syncRemoteOrg(tenant *Tenant) {
 	if ok && success {
 		orgMapList := respBody["data"].([]interface{})
 		tx, rerr := db.MySQL.Begin()
+		//添加组织机构
 		recursionSaveOrUpdateOrg(tx, tenant, orgMapList)
 		if rerr != nil {
 			tx.Rollback()
@@ -307,7 +300,7 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 			Location:  orgMap["location"].(string),
 		}
 		logger.Infof("同步机构：%v", org)
-		exists, parentId := isExists(org.ID)
+		/**exists, parentId := isExists(org.ID)
 		if exists && parentId == org.ParentId {
 			updateOrg(org, tx)
 		} else if exists {
@@ -316,7 +309,10 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 		} else {
 			addOrg(org, tx)
 			resetLocation(org, tx)
-		}
+		}**/
+		addOrg(org, tx)
+		resetLocation(org, tx)
+
 		//机构下的用户
 		userMapList := orgMap["rusers"]
 		if nil != userMapList {
@@ -335,9 +331,10 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 
 				uid := memberMap["id"].(string)
 				userNmae := memberMap["id"].(string) + USER_SUFFIX
-				name := memberMap["code"].(string)
+				//name := memberMap["code"].(string)
 				mobile, _ := memberMap["phone"].(string)
 				email, _ := memberMap["email"].(string)
+				icon, _ := memberMap["icon"].(string)
 
 				logger.Infof("同步用户%v", memberMap)
 				exists := isUserExists(uid)
@@ -346,7 +343,8 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 				if exists {
 					m = getUserByUid(uid)
 					m.UserName = userNmae
-					m.Name = name
+					//m.Name = name
+					m.Avatar = icon
 					m.PYInitial = p
 					m.PYQuanPin = p
 					m.Status = status
@@ -362,9 +360,10 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 				} else {
 					//新增
 					m = &member{
-						Uid:       uid,
-						UserName:  userNmae,
-						Name:      name,
+						Uid:      uid,
+						UserName: userNmae,
+						//Name:      name,
+						Avatar:    icon,
 						NickName:  uname,
 						PYInitial: p,
 						PYQuanPin: p,
@@ -387,6 +386,7 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 							logger.Info("addOrgUser  successed")
 						}
 					}
+
 				}
 			}
 		}
@@ -678,9 +678,8 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 
 	if ok {
 		apnsToken := &ApnsToken{
-			UserId: member.Uid,
-			//DeviceId:  deviceId,  IOS获取不到deviceID，用APNSToken代替
-			DeviceId:  apnsTokenStr,
+			UserId:    member.Uid,
+			DeviceId:  deviceId,
 			ApnsToken: apnsTokenStr,
 			Created:   time.Now().Local(),
 			Updated:   time.Now().Local(),
@@ -1086,7 +1085,7 @@ func (*app) RemoveOrgUser(w http.ResponseWriter, r *http.Request) {
 	res["successed"] = b
 }
 
-func removeOrgByTenantId(tenantId string) bool {
+func removeOrgUer(userId string) bool {
 	tx, err := db.MySQL.Begin()
 
 	if err != nil {
@@ -1094,18 +1093,14 @@ func removeOrgByTenantId(tenantId string) bool {
 
 		return false
 	}
-
-	_, err = tx.Exec("delete from org where  tenant_id = ?", tenantId)
+	_, err = tx.Exec("delete from org_user where  user_id = ?", userId)
 	if err != nil {
 		logger.Error(err)
 
 		if err := tx.Rollback(); err != nil {
 			logger.Error(err)
 		}
-
-		return false
 	}
-
 	if err := tx.Commit(); err != nil {
 		logger.Error(err)
 
@@ -1115,7 +1110,8 @@ func removeOrgByTenantId(tenantId string) bool {
 	return true
 }
 
-func removeUserByTenantId(tenantId string) bool {
+//删除租户的组织机构信息
+func removeTenant(tenantId string) bool {
 	tx, err := db.MySQL.Begin()
 
 	if err != nil {
@@ -1123,18 +1119,14 @@ func removeUserByTenantId(tenantId string) bool {
 
 		return false
 	}
-
-	_, err = tx.Exec("delete from user  where  tenant_id = ?", tenantId)
+	_, err = tx.Exec("delete from org where  tenant_id = ?", tenantId)
 	if err != nil {
 		logger.Error(err)
 
 		if err := tx.Rollback(); err != nil {
 			logger.Error(err)
 		}
-
-		return false
 	}
-
 	if err := tx.Commit(); err != nil {
 		logger.Error(err)
 

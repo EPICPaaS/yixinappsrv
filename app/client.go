@@ -333,9 +333,8 @@ func (*device) AddApnsToken(w http.ResponseWriter, r *http.Request) {
 
 	if ok {
 		apnsToken := &ApnsToken{
-			UserId: user.Uid,
-			//DeviceId:  deviceId,  IOS获取不到deviceID，用APNSToken代替
-			DeviceId:  apnsTokenStr,
+			UserId:    user.Uid,
+			DeviceId:  deviceId,
 			ApnsToken: apnsTokenStr,
 			Created:   time.Now().Local(),
 			Updated:   time.Now().Local(),
