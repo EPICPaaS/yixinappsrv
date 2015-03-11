@@ -429,10 +429,11 @@ func InitQuotaAll() {
 	rows, err := db.MySQL.Query(SELECT_QUOTA_ALL)
 	if err != nil {
 		logger.Errorf("load quota err [%s]", err)
+		return
 	}
-	if rows != nil {
-		defer rows.Close()
-	}
+
+	defer rows.Close()
+
 	QuotaAll = nil
 	QuotaAll = make(map[string]Quota)
 	key := bytes.Buffer{}
