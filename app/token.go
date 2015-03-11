@@ -181,6 +181,31 @@ func genToken(m *member, sessionId string) (string, error) {
 
 	return token, nil
 }
+func removeToken(token string) (bool, error) {
+	conn := rs.getConn("token")
+	if conn == nil {
+		return false, RedisNoConnErr
+	}
+
+	defer conn.Close()
+
+	// 设置令牌过期时间
+	if err := conn.Send("EXPIRE", token, 1); err != nil {
+		logger.Error(err)
+		return false, err
+	}
+	if err := conn.Flush(); err != nil {
+		logger.Error(err)
+		return false, err
+	}
+
+	_, err := conn.Receive()
+	if err != nil {
+		logger.Error(err)
+		return false, err
+	}
+	return true, nil
+}
 
 // 获取 Redis 连接.
 func (s *redisStorage) getConn(key string) redis.Conn {

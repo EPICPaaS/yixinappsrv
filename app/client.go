@@ -321,6 +321,7 @@ func (*device) AddApnsToken(w http.ResponseWriter, r *http.Request) {
 	baseReq := args["baseRequest"].(map[string]interface{})
 	// Token 校验
 	token := baseReq["token"].(string)
+	deviceId := baseReq["deviceId"].(string)
 	user := getUserByToken(token)
 	if nil == user {
 		baseRes.Ret = AuthErr
