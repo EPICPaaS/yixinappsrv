@@ -456,6 +456,55 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 	res["member"] = member
 }
 
+// 客户端设备登出
+func (*device) LoginOut(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method Not Allowed", 405)
+		return
+	}
+	baseRes := baseResponse{OK, ""}
+	body := ""
+	res := map[string]interface{}{"baseResponse": &baseRes}
+	defer RetPWriteJSON(w, r, res, &body, time.Now())
+
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		res["ret"] = ParamErr
+		logger.Errorf("ioutil.ReadAll() failed (%s)", err.Error())
+		return
+	}
+	body = string(bodyBytes)
+
+	var args map[string]interface{}
+
+	if err := json.Unmarshal(bodyBytes, &args); err != nil {
+		baseRes.ErrMsg = err.Error()
+		baseRes.Ret = ParamErr
+
+		return
+	}
+
+	baseReq := args["baseRequest"].(map[string]interface{})
+
+	uid := baseReq["uid"].(string)
+	token := baseReq["token"].(string)
+	deviceId := baseReq["deviceID"].(string)
+	customer_id := baseReq["customer_id"].(string)
+	deviceType := baseReq["deviceType"].(string)
+
+	logger.Infof("uid [%s], deviceId [%s], deviceType [%s], token [%s], customer_id [%s]",
+		uid, deviceId, deviceType, token, customer_id)
+	_, err = removeToken(token)
+	if nil != err {
+		logger.Error(err)
+
+		baseRes.ErrMsg = err.Error()
+		baseRes.Ret = InternalErr
+
+		return
+	}
+}
+
 type members []*member
 
 type BySort struct {
