@@ -4,7 +4,7 @@ import (
 	//"database/sql"
 	"bytes"
 	"encoding/json"
-	"fmt"
+	//"fmt"
 	"github.com/EPICPaaS/go-uuid/uuid"
 	"github.com/EPICPaaS/yixinappsrv/db"
 	"io/ioutil"
@@ -17,7 +17,7 @@ const (
 	// 根据 id 查询应用记录.
 	SelectApplicationById = "SELECT  * FROM `application` WHERE `id` = ?"
 	// 查询应用记录.
-	SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF(a.follow = '1','1','0') as fllow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
+	SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF( isnull(a.follow) ,t.follow,a.follow)  as follow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
 	// 根据 token 获取应用记录.
 	SelectApplicationByToken = "SELECT * FROM `application` WHERE `token` = ?"
 	//根据应用ID查询应用操作项列表
@@ -25,9 +25,9 @@ const (
 	//根据操作项父ID查询应用操作项列表
 	SelectAppOpertionByParentId = "SELECT `id`, `app_id`, `content`,`action`, `operation_type`,`sort`  FROM `operation` WHERE `parent_id` = ?  order by  sort "
 	//插入用户关注的应用
-	InsertAppUser = "INSERT INTO `app_user`(`id`,`appid`,`uid`,`follow`) VALUES(?,?,?,'1')"
+	InsertAppUser = "INSERT INTO `app_user`(`id`,`appid`,`uid`,`follow`) VALUES(?,?,?,?)"
 	//删除用户关注应用信息
-	DeleteAppUser = "DELETE FROM app_user where appid = ?  and uid = ? "
+	UpdateAppUser = "UPDATE  app_user  set follow = ?  where id = ? "
 	//查询用户是否关注该企业号
 	SelectAppUser = "SELECT `id`,`appid`,`uid`,`follow` FROM `app_user` where appid = ?  and uid = ? "
 )
@@ -48,6 +48,7 @@ type application struct {
 	PYInitial   string    `json:"pYInitial"`
 	PYQuanPin   string    `json:"pYQuanPin"`
 	Description string    `json:"description"`
+	Follow      string    `json:"follow"`
 }
 
 // 应用操作项
@@ -77,7 +78,7 @@ func getApplication(appId string) (*application, error) {
 	application := application{}
 
 	if err := row.Scan(&application.Id, &application.Name, &application.Token, &application.Type, &application.Status,
-		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description); err != nil {
+		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description, &application.Follow); err != nil {
 		logger.Error(err)
 
 		return nil, err
@@ -93,25 +94,26 @@ func getApplication(appId string) (*application, error) {
 
 func getAllApplication(tenantId, uid string) ([]*member, error) {
 	rows, _ := db.MySQL.Query(SelectAllApplication, tenantId, uid)
+	ret := []*member{}
 	if rows != nil {
 		defer rows.Close()
-	}
-	ret := []*member{}
-	for rows.Next() {
-		rec := member{}
 
-		if err := rows.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Sort, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Description, &rec.Follow); err != nil {
-			logger.Error(err)
+		for rows.Next() {
+			rec := member{}
 
-			return nil, err
+			if err := rows.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Sort, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Description, &rec.Follow); err != nil {
+				logger.Error(err)
+
+				return nil, err
+			}
+			if len(rec.Avatar) > 0 {
+				rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+				rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
+			}
+			rec.UserName = rec.Uid + APP_SUFFIX
+			ret = append(ret, &rec)
+
 		}
-		if len(rec.Avatar) > 0 {
-			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
-			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
-		}
-		rec.UserName = rec.Uid + APP_SUFFIX
-		ret = append(ret, &rec)
-
 	}
 
 	return ret, nil
@@ -160,7 +162,7 @@ func getApplicationByToken(token string) (*application, error) {
 	application := application{}
 
 	if err := row.Scan(&application.Id, &application.Name, &application.Token, &application.Type, &application.Status,
-		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description); err != nil {
+		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description, &application.Follow); err != nil {
 		logger.Error(err)
 
 		return nil, err
@@ -327,14 +329,14 @@ func (*device) UserFollowApp(w http.ResponseWriter, r *http.Request) {
 
 	appId := appName[:strings.Index(appName, "@")]
 	userApp := &userapp{
-		AppId: appId,
-		UId:   user.Uid,
+		AppId:  appId,
+		UId:    user.Uid,
+		Follow: "1",
 	}
-	application, _ := getApplication(appId)
 
 	if insertUserApp(userApp) {
 		//发送一条应用消息告知用户关注了该应用
-
+		application, _ := getApplication(appId)
 		data := []byte(`{
 				"baseRequest":{"token":"` + application.Token + `"},
 				"msgType":103 ,
@@ -344,9 +346,9 @@ func (*device) UserFollowApp(w http.ResponseWriter, r *http.Request) {
 				"expire":3600
 			}`)
 		body := bytes.NewReader(data)
-		fmt.Printf("%s", string(data[:]))
 		appPush := "http://" + Conf.AppPush[0] + "/app/client/app/user/push"
 		http.Post(appPush, "text/plain;charset=UTF-8", body) //不成功也不管了
+		logger.Infof("%s,%s", Conf.AppPush[0], string(data[:]))
 
 		baseRes.Ret = OK
 		baseRes.ErrMsg = "Save app user success"
@@ -405,7 +407,13 @@ func (*device) UserUnFollowApp(w http.ResponseWriter, r *http.Request) {
 
 	appId := appName[:strings.Index(appName, "@")]
 
-	if delUserApp(appId, user.Uid) {
+	userApp := &userapp{
+		AppId:  appId,
+		UId:    user.Uid,
+		Follow: "0",
+	}
+
+	if insertUserApp(userApp) {
 		/**
 			application, _ := getApplication(appId)
 				//发送一条应用消息告知用户取消关注了该应用
@@ -445,7 +453,6 @@ func getUserApp(appId, uid string) (*userapp, error) {
 	return &userapp, nil
 }
 
-/*保存apnstoken证书*/
 func insertUserApp(userApp *userapp) bool {
 	userapp, _ := getUserApp(userApp.AppId, userApp.UId)
 	if nil == userapp {
@@ -454,7 +461,26 @@ func insertUserApp(userApp *userapp) bool {
 			logger.Error(err)
 			return false
 		}
-		_, err = tx.Exec(InsertAppUser, uuid.New(), userApp.AppId, userApp.UId)
+		_, err = tx.Exec(InsertAppUser, uuid.New(), userApp.AppId, userApp.UId, userApp.Follow)
+		if err != nil {
+			logger.Error(err)
+			if err := tx.Rollback(); err != nil {
+				logger.Error(err)
+			}
+			return false
+		}
+
+		if err := tx.Commit(); err != nil {
+			logger.Error(err)
+			return false
+		}
+	} else {
+		tx, err := db.MySQL.Begin()
+		if err != nil {
+			logger.Error(err)
+			return false
+		}
+		_, err = tx.Exec(UpdateAppUser, userApp.Follow, userapp.Id)
 		if err != nil {
 			logger.Error(err)
 			if err := tx.Rollback(); err != nil {
@@ -468,30 +494,5 @@ func insertUserApp(userApp *userapp) bool {
 			return false
 		}
 	}
-	return true
-}
-
-func delUserApp(appId, uid string) bool {
-
-	tx, err := db.MySQL.Begin()
-	if err != nil {
-		logger.Error(err)
-		return false
-	}
-
-	_, err = tx.Exec(DeleteAppUser, appId, uid)
-	if err != nil {
-		logger.Error(err)
-		if err := tx.Rollback(); err != nil {
-			logger.Error(err)
-		}
-		return false
-	}
-
-	if err := tx.Commit(); err != nil {
-		logger.Error(err)
-		return false
-	}
-
 	return true
 }
