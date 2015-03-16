@@ -503,6 +503,7 @@ func (*device) LoginOut(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	deleteApnsTokenByDeviceId(deviceId)
 }
 
 type members []*member
