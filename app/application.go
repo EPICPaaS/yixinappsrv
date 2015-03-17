@@ -421,8 +421,8 @@ func (*device) UserUnFollowApp(w http.ResponseWriter, r *http.Request) {
 						"msgType":104 ,
 						"content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用" ,
 						"toUserNames":["` + user.Uid + USER_SUFFIX + `"],
-						"objectContent":{"appId":"` + appId + `" , "content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用"},
-						"expire":3600
+						"objectContent":{"appId":"` + appId + `" , "content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用"}
+						
 					}`)
 		body := bytes.NewReader(data)
 
