@@ -238,8 +238,7 @@ func GetMd5String(s string) string {
 	h := md5.New()
 	h.Write([]byte(s))
 	//cipherStr := h.Sum(nil)
-
-	return hex.EncodeToString(h.Sum(nil))
+	return strings.ToUpper(hex.EncodeToString(h.Sum(nil)))
 }
 
 /*
