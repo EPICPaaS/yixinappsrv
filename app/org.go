@@ -761,7 +761,10 @@ func (*device) LoginOut(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	deleteApnsTokenByDeviceId(deviceId)
+
+	if !deleteApnsTokenByDeviceId(deviceId) {
+		baseRes.Ret = InternalErr
+	}
 }
 
 type members []*member
