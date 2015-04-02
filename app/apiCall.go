@@ -7,7 +7,7 @@ import (
 	"github.com/EPICPaaS/go-uuid/uuid"
 	"github.com/EPICPaaS/yixinappsrv/db"
 	"io/ioutil"
-	"math/rand"
+	//"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -119,18 +119,18 @@ func ApiCallStatistics(w http.ResponseWriter, r *http.Request) bool {
 
 		tenantId = user.TenantId
 		cllerId = user.Uid
-	} else { //应用校验
-		application, err := getApplicationByToken(token)
-		if nil != err || nil == application {
-			logger.Trace("api_call error: [Logon failure]")
-			baseRes.ErrMsg = "Auth failure"
-			RetPWriteJSON(w, r, res, &resBody, time.Now())
-			return false
-		}
-		//应用10个分片
-		sharding = rand.Intn(10)
-		tenantId = application.TenantId
-		cllerId = application.Id
+	} else { //应用校验   -- 应用不需要校验，应用不属于某租户。
+		//application, err := getApplicationByToken(token)
+		//if nil != err || nil == application {
+		//	logger.Trace("api_call error: [Logon failure]")
+		//	baseRes.ErrMsg = "Auth failure"
+		//	RetPWriteJSON(w, r, res, &resBody, time.Now())
+		//	return false
+		//}
+		////应用10个分片
+		//sharding = rand.Intn(10)
+		//tenantId = application.TenantId
+		//cllerId = application.Id
 	}
 	//获取租户信息
 	tenant := getTenantById(tenantId)

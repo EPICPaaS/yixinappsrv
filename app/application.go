@@ -17,7 +17,8 @@ const (
 	// 根据 id 查询应用记录.
 	SelectApplicationById = "SELECT  * FROM `application` WHERE `id` = ?"
 	// 查询应用记录.
-	SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF( isnull(a.follow) ,t.follow,a.follow)  as follow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
+	//SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF( isnull(a.follow) ,t.follow,a.follow)  as follow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
+	SelectAllApplication = "select t.id, t.name, t.nickName, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF( isnull(a.follow) ,t.follow,a.follow)  as follow from ( SELECT app.id,app.name  ,app.name as nickName,app.status, app.sort,app.avatar, tnt.tenant_id,app.name_py,app.name_quanpin ,app.description, IF( isnull(app.follow) ,tnt.follow,app.follow)  as follow from application  app , app_tenant tnt where app.id = tnt.app_id and   tnt.tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
 	// 根据 token 获取应用记录.
 	SelectApplicationByToken = "SELECT * FROM `application` WHERE `token` = ?"
 	//根据应用ID查询应用操作项列表
@@ -69,6 +70,13 @@ type userapp struct {
 	AppId  string `json:"appId"`
 	UId    string `json:"uid"`
 	Follow string `json:"follow"`
+}
+
+type tenantapp struct {
+	Id       string `json:"id"`
+	AppId    string `json:"app_id"`
+	TenantId string `json:"tenant_id"`
+	Follow   string `json:"follow"`
 }
 
 // 根据 id 查询应用记录.
