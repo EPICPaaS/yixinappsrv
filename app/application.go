@@ -422,22 +422,21 @@ func (*device) UserUnFollowApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if insertUserApp(userApp) {
-		/**
-			application, _ := getApplication(appId)
-				//发送一条应用消息告知用户取消关注了该应用
-				data := []byte(`{
+
+		application, _ := getApplication(appId)
+		//发送一条应用消息告知用户取消关注了该应用
+		data := []byte(`{
 						"baseRequest":{"token":"` + application.Token + `"},
-						"msgType":103 ,
+						"msgType":104 ,
 						"content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用" ,
 						"toUserNames":["` + user.Uid + USER_SUFFIX + `"],
 						"objectContent":{"appId":"` + appId + `" , "content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用"},
 						"expire":3600
 					}`)
-				body := bytes.NewReader(data)
-				fmt.Printf("%s", string(data[:]))
-				appPush := "http://" + Conf.AppPush[0] + "/app/client/app/user/push"
-				http.Post(appPush, "text/plain;charset=UTF-8", body) //不成功也不管了
-		**/
+		body := bytes.NewReader(data)
+		appPush := "http://" + Conf.AppPush[0] + "/app/client/app/user/push"
+		http.Post(appPush, "text/plain;charset=UTF-8", body) //不成功也不管了
+
 		baseRes.Ret = OK
 		baseRes.ErrMsg = "Delete app user success"
 		return
