@@ -77,7 +77,7 @@ func ExistFileLink(fileLink *FileLink) bool {
 
 /*删除weedfs服务器文件*/
 func DeleteFile(fileId string) bool {
-	var url = "http://115.29.107.77:5083/delete?fid=" + fileId
+	var url = Conf.WeedfsAddr + "/delete?fid=" + fileId
 	resp, err := http.Get(url)
 	if err != nil {
 		logger.Errorf("delete file fail  [ERROR]-%s", err.Error())
