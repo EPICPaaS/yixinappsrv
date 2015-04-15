@@ -113,7 +113,7 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				uid := userMap["id"].(string)
 				user := getUserAndOrgNameByUid(uid)
 
-				logger.Info(uid)
+				//logger.Info(uid)
 				user.Name = userMap["code"].(string)
 				user.NickName = userMap["name"].(string)
 				user.Password = userMap["password"].(string)
@@ -127,6 +127,10 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 
 				if !updateMember(user) {
 					return false, nil, ""
+				}
+
+				if len(user.Avatar) > 0 {
+					user.Avatar = "http://" + Conf.WeedfsAddr + "/" + user.Avatar
 				}
 				//登录成功
 				return true, user, sessionId
@@ -149,10 +153,6 @@ func getUserAndOrgNameByUid(uid string) *member {
 		logger.Error(err)
 		return nil
 	} else {
-		if len(rec.Avatar) > 0 {
-			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
-			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
-		}
 		rec.UserName = rec.Uid + USER_SUFFIX
 	}
 
@@ -171,7 +171,6 @@ func getUserAndOrgNameByName(name string) *member {
 		return nil
 	} else {
 		if len(rec.Avatar) > 0 {
-			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
 			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
 		}
 		rec.UserName = rec.Uid + USER_SUFFIX
@@ -322,6 +321,10 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 
 		toUser = getUserAndOrgNameByUid(uid)
 
+		if len(toUser.Avatar) > 0 {
+			toUser.Avatar = "http://" + Conf.WeedfsLocalAddr + "/" + toUser.Avatar
+		}
+
 	} else if strings.HasSuffix(userName, APP_SUFFIX) { //应用
 
 		app, err := getApplication(uid)
@@ -330,6 +333,12 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 			baseRes.Ret = ParamErr
 		}
 		userapp, _ := getUserApp(app.Id, user.Uid)
+
+		if len(app.Avatar) > 0 {
+			//用外网转发地址
+			app.Avatar = strings.Replace(app.Avatar, ",", "/", 1)
+			app.Avatar = "http://" + Conf.WeedfsAddr + "/" + app.Avatar
+		}
 
 		toUser = &member{}
 		toUser.Uid = app.Id
@@ -594,7 +603,6 @@ func getUserListByOrgId(id, currentId string) members {
 		}
 		rec.UserName = rec.Uid + USER_SUFFIX
 		if len(rec.Avatar) > 0 {
-			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
 			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
 		}
 		ret = append(ret, rec)
@@ -1659,7 +1667,6 @@ func getStarUser(userId string) members {
 
 		rec.UserName = rec.Uid + USER_SUFFIX
 		if len(rec.Avatar) > 0 {
-			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
 			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
 		}
 		ret = append(ret, &rec)
@@ -1700,7 +1707,6 @@ func searchUser(tenantId, nickName, currentId string, offset, limit int) (member
 
 		rec.UserName = rec.Uid + USER_SUFFIX
 		if len(rec.Avatar) > 0 {
-			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
 			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
 		}
 		ret = append(ret, &rec)
