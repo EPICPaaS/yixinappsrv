@@ -322,7 +322,7 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 		toUser = getUserAndOrgNameByUid(uid)
 
 		if len(toUser.Avatar) > 0 {
-			toUser.Avatar = "http://" + Conf.WeedfsLocalAddr + "/" + toUser.Avatar
+			toUser.Avatar = "http://" + Conf.WeedfsAddr + "/" + toUser.Avatar
 		}
 
 	} else if strings.HasSuffix(userName, APP_SUFFIX) { //应用

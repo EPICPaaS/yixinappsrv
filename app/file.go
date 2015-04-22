@@ -77,7 +77,7 @@ func ExistFileLink(fileLink *FileLink) bool {
 
 /*删除weedfs服务器文件*/
 func DeleteFile(fileId string) bool {
-	var url = Conf.WeedfsAddr + "/delete?fid=" + fileId
+	var url = Conf.WeedfsLocalAddr + "/delete?fid=" + fileId
 	resp, err := http.Get(url)
 	if err != nil {
 		logger.Errorf("delete file fail  [ERROR]-%s", err.Error())
@@ -183,7 +183,7 @@ func (*device) GetUserAvatar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		u.Avatar = strings.Replace(u.Avatar, ",", "/", 1)
-		addr = "http://" + Conf.WeedfsAddr + "/" + u.Avatar + "?width=" + width + "&height=" + height
+		addr = "http://" + Conf.WeedfsLocalAddr + "/" + u.Avatar + "?width=" + width + "&height=" + height
 
 	} else if strings.HasSuffix(userName, APP_SUFFIX) { //应用头像
 
@@ -254,8 +254,8 @@ func (*device) SetUserAvatar(w http.ResponseWriter, r *http.Request) {
 	userName := args["userName"].(string)
 
 	fileId := responseUpload["fid"].(string)
-	fileSuffix := args["fileExtention"].(string)
-	if !saveAvatar(userName, fileId+"/."+fileSuffix) {
+	//fileSuffix := args["fileExtention"].(string)
+	if !saveAvatar(userName, fileId) {
 		baseRes.Ret = InternalErr
 		return
 	}
@@ -283,7 +283,6 @@ func saveAvatar(userName, avatar string) bool {
 	if err := row.Scan(&oldAvatar); err != nil {
 		logger.Error(err)
 	}
-
 	//没改变不需要修改
 	if avatar == oldAvatar {
 		return true
@@ -311,9 +310,10 @@ func saveAvatar(userName, avatar string) bool {
 
 	//删除旧头像文件
 	if len(oldAvatar) != 0 {
-		fileId := oldAvatar[:strings.Index(oldAvatar, "/")]
-		if !DeleteFile(fileId) {
-			logger.Errorf("delete file fail , file id is %s", fileId)
+		//fileId := oldAvatar[:strings.Index(oldAvatar, "/")]
+		logger.Infof("%v", oldAvatar)
+		if !DeleteFile(oldAvatar) {
+			logger.Errorf("delete file fail , file id is %s", oldAvatar)
 		}
 	}
 
