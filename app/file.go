@@ -193,9 +193,9 @@ func (*device) GetUserAvatar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		addr = app.Avatar + "?width=" + width + "&height=" + height
+		addr = "http://" + Conf.WeedfsLocalAddr + "/" + app.Avatar + "?width=" + width + "&height=" + height
 	}
-
+	logger.Infof("%v", addr)
 	resp, err := http.Get(addr)
 	if err != nil {
 		logger.Error(err)
