@@ -342,10 +342,11 @@ func (*device) UserFollowApp(w http.ResponseWriter, r *http.Request) {
 		data := []byte(`{
 				"baseRequest":{"token":"` + application.Token + `"},
 				"msgType":103 ,
+				"statusId":"",
 				"content":"感谢你关注了` + application.Name + `" ,
 				"toUserNames":["` + user.Uid + USER_SUFFIX + `"],
 				"objectContent":{"appId":"` + appId + `" , "content":"非常感谢你关注了` + application.Name + `"},
-				"expire":3600
+				"expire":360000
 			}`)
 		body := bytes.NewReader(data)
 		appPush := "http://" + Conf.AppPush[0] + "/app/client/app/user/push"
@@ -421,11 +422,12 @@ func (*device) UserUnFollowApp(w http.ResponseWriter, r *http.Request) {
 		//发送一条应用消息告知用户取消关注了该应用
 		data := []byte(`{
 						"baseRequest":{"token":"` + application.Token + `"},
-						"msgType":104 ,
+						"msgType":103 ,
+						"statusId":"",
 						"content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用" ,
 						"toUserNames":["` + user.Uid + USER_SUFFIX + `"],
 						"objectContent":{"appId":"` + appId + `" , "content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用"},
-						"expire":3600
+						"expire":360000
 					}`)
 		body := bytes.NewReader(data)
 		appPush := "http://" + Conf.AppPush[0] + "/app/client/app/user/push"
