@@ -1,6 +1,7 @@
 package app
 
 import (
+	//"bytes"
 	"database/sql"
 	"encoding/json"
 	"github.com/EPICPaaS/go-uuid/uuid"
@@ -85,8 +86,15 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 			if u == nil {
 				return false, nil, ""
 			}
-			//logger.Info(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
-			res, err := http.Get(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
+			logger.Info(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
+			//data := []byte(`{
+			//			"usercode":"` + u.Name + `"
+			//			"password":"` + password + `"
+			//		}`)
+			//body := bytes.NewReader(data)
+			res, err := http.Post(EI.HttpUrl, "application/x-www-form-urlencoded", strings.NewReader("usercode="+u.Name+"&password="+password)) //用post提交
+
+			//res, err := http.Get(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
 			if err != nil {
 				logger.Error(err)
 				return false, nil, ""
@@ -105,6 +113,9 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				return false, nil, ""
 			}
 			success, ok := respBody["succeed"].(bool)
+
+			logger.Infof("success[%s],ok[%s]", success, ok)
+
 			if ok && success {
 
 				sessionId = respBody["token"].(string)
@@ -113,7 +124,8 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				uid := userMap["id"].(string)
 				user := getUserAndOrgNameByUid(uid)
 
-				//logger.Info(uid)
+				logger.Infof("uid[%s]", uid)
+
 				user.Name = userMap["code"].(string)
 				user.NickName = userMap["name"].(string)
 				user.Password = userMap["password"].(string)
@@ -412,10 +424,11 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 	userName := args["userName"].(string)
 	password := args["password"].(string)
 
-	logger.Tracef("uid [%s], deviceId [%s], deviceType [%s], userName [%s], password [%s]",
+	logger.Infof("customer_id[%s],uid [%s], deviceId [%s], deviceType [%s], userName [%s], password [%s]", customer_id,
 		uid, deviceId, deviceType, userName, password)
 
 	loginOK, member, sessionId := loginAuth(userName, password, customer_id)
+	logger.Infof("loginOK[%s],sessionId [%s], member [%s]", loginOK, sessionId, member)
 	if !loginOK {
 		baseRes.ErrMsg = "auth failed"
 		baseRes.Ret = LoginErr
@@ -463,6 +476,7 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 
 	res["token"] = token
 	res["member"] = member
+	logger.Infof("res[%s]", res)
 }
 
 // 客户端设备登出
