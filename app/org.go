@@ -114,7 +114,8 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 			if ok && success {
 				userMap := respBody["data"].(map[string]interface{})
 				uid := userMap["id"].(string)
-				sessionId = userMap["token"].(string)
+				//sessionId = userMap["token"].(string)
+				sessionId = uuid.New()
 				//目前客户端不支持多租户，先取第一个租户为登陆租户
 				/*租户信息（用户属于多个租户）*/
 				tenantList := userMap["tenantList"].([]interface{})
@@ -203,7 +204,7 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 
 				user.Name = userMap["code"].(string)
 				user.NickName = userMap["name"].(string)
-				user.Password = userMap["pass"].(string)
+				//user.Password = userMap["pass"].(string)
 				email := userMap["email"]
 				if nil != email {
 					user.Email = email.(string)
