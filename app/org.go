@@ -121,7 +121,7 @@ func login(username, password, customer_id string) interface{} {
 //  1. 根据指定的 tenantId 查询 customerId
 //  2. 在 external_interface 表中根据 customerId、type = 'login' 等信息查询接口地址
 //  3. 根据接口地址调用验证接口
-func loginAuth(username, password, customer_id string) (loginOk bool, user *member, sessionId string) {
+func loginAuth(username, password, tenantId, customer_id string) (loginOk bool, user *member, sessionId string) {
 
 	// TODO:ghg
 	EI := GetExtInterface(customer_id, "login")
@@ -165,10 +165,10 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 			if ok && success {
 				userMap := respBody["data"].(map[string]interface{})
 				//uid := userMap["id"].(string)
-				sessionId = userMap["token"].(string)
+				sessionId = uuid.New()
 				//目前客户端不支持多租户，先取第一个租户为登陆租户
 				/*租户信息（用户属于多个租户）*/
-				//tenantList := userMap["tenantList"].([]interface{})
+				tenantList := userMap["tenantList"].([]interface{})
 
 				var user *member = &member{}
 
@@ -253,14 +253,31 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 				//	}
 				//}
 
-				user.Name = userMap["code"].(string)
-				user.NickName = userMap["name"].(string)
-				user.Password = userMap["pass"].(string)
+				var existTenantFlag string = "0"
+				for _, tn := range tenantList {
+					tmp := tn.(map[string]interface{})
+					tId := tmp["id"].(string)
+					if tId == tenantId {
+						user.Uid, _ = tmp["uuid"].(string)
+						user.TenantId = tenantId
+						existTenantFlag = "1"
+					}
+
+				}
+
+				if existTenantFlag == "0" {
+					logger.Infof("当前用户不在 TenantId [%s] 租户下 ", tenantId)
+					return false, nil, ""
+				}
+
+				user.Name, _ = userMap["code"].(string)
+				user.NickName, _ = userMap["name"].(string)
+				user.Password, _ = userMap["pass"].(string)
 				email := userMap["email"]
 				if nil != email {
 					user.Email = email.(string)
 				}
-				icon := userMap["icon"]
+				icon, _ := userMap["icon"]
 				if nil != icon {
 					user.Avatar = icon.(string)
 				}
@@ -270,10 +287,10 @@ func loginAuth(username, password, customer_id string) (loginOk bool, user *memb
 					//暂时不同步电话
 					user.Mobile = phone
 				}
-				//logger.Infof("用户更新：%v", user)
-				//if !updateMember(user) {
-				//	return false, nil, ""
-				//}
+				logger.Infof("用户更新：%v", user)
+				if !updateMember(user) {
+					return false, nil, ""
+				}
 				//登录成功
 				user.Avatar = strings.Replace(user.Avatar, ",", "/", 1)
 				user.Avatar = "http://" + Conf.WeedfsAddr + "/" + user.Avatar
@@ -713,11 +730,12 @@ func (*device) Login(w http.ResponseWriter, r *http.Request) {
 	deviceType := baseReq["deviceType"].(string)
 	userName := args["userName"].(string)
 	password := args["password"].(string)
+	tenantId := args["tenantId"].(string)
 
-	logger.Tracef("uid [%s], deviceId [%s], deviceType [%s], userName [%s], password [%s]",
-		uid, deviceId, deviceType, userName, password)
+	logger.Tracef("uid [%s], deviceId [%s], deviceType [%s], userName [%s], password [%s],tenantId[%s]",
+		uid, deviceId, deviceType, userName, password, tenantId)
 
-	loginOK, member, sessionId := loginAuth(userName, password, customer_id)
+	loginOK, member, sessionId := loginAuth(userName, password, tenantId, customer_id)
 	if !loginOK {
 		baseRes.ErrMsg = "auth failed"
 		baseRes.Ret = LoginErr
