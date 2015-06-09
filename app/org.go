@@ -107,8 +107,7 @@ func login(username, password, customer_id string) interface{} {
 			logger.Infof("登陆结果：%v", respBody)
 			if ok && success {
 				userMap := respBody["data"].(map[string]interface{})
-				tenantList := userMap["tenantList"].([]interface{})
-				return tenantList
+				return userMap
 			}
 			return nil
 		}
@@ -134,36 +133,9 @@ func loginAuth(username, password, tenantId, customer_id string) (loginOk bool, 
 				return false, nil, ""
 			}
 		} else {
-			/*用户可以输入手机和邮箱登录*/
-			//u := GetUserByME(username)
-			//if u == nil {
-			//	return false, nil, ""
-			//}
-			//logger.Info(EI.HttpUrl + "?usercode=" + u.Name + "&password=" + password)
+			userMap := login(username, password, customer_id).(map[string]interface{})
+			if nil != userMap {
 
-			// yop
-			res, err := http.Get(EI.HttpUrl + "?code=" + username + "&pass=" + password)
-			if err != nil {
-				logger.Error(err)
-				return false, nil, ""
-			}
-
-			resBodyByte, err := ioutil.ReadAll(res.Body)
-			defer res.Body.Close()
-			if err != nil {
-				logger.Error(err)
-				return false, nil, ""
-			}
-			var respBody map[string]interface{}
-
-			if err := json.Unmarshal(resBodyByte, &respBody); err != nil {
-				logger.Errorf("convert to json failed (%s)", err.Error())
-				return false, nil, ""
-			}
-			success, ok := respBody["succeed"].(bool)
-			logger.Infof("登陆结果：%v", respBody)
-			if ok && success {
-				userMap := respBody["data"].(map[string]interface{})
 				//uid := userMap["id"].(string)
 				sessionId = uuid.New()
 				//目前客户端不支持多租户，先取第一个租户为登陆租户
@@ -1095,9 +1067,16 @@ func (*app) GetTenantList(w http.ResponseWriter, r *http.Request) {
 	userName := args["userName"].(string)
 	password := args["password"].(string)
 
-	m := login(userName, password, customer_id)
-	logger.Infof("--->  %s", m)
-	res["tenantList"] = m
+	userMap, _ := login(userName, password, customer_id).(map[string]interface{})
+	if userMap != nil {
+		tenantList := userMap["tenantList"].([]interface{})
+		res["tenantList"] = tenantList
+	} else {
+		baseRes.Ret = AuthErr
+		baseRes.ErrMsg = "TenantList is empty"
+		res["tenantList"] = nil
+	}
+
 }
 
 /*获取人员的单位集*/
