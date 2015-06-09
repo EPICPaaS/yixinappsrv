@@ -53,6 +53,8 @@ type Tenant struct {
 	CustomerId string    `json:"customerId"`
 	Created    time.Time `json:"created"`
 	Updated    time.Time `json:"updated"`
+	Icon       string    `json"icon"`
+	NameSpace  string    `json:"namespace"`
 }
 
 type ExternalInterface struct {
@@ -1070,7 +1072,34 @@ func (*app) GetTenantList(w http.ResponseWriter, r *http.Request) {
 	userMap, _ := login(userName, password, customer_id).(map[string]interface{})
 	if userMap != nil {
 		tenantList := userMap["tenantList"].([]interface{})
-		res["tenantList"] = tenantList
+
+		tmpList := []*Tenant{}
+
+		for _, tn := range tenantList {
+			tmp := tn.(map[string]interface{})
+			tenantId := tmp["id"].(string)
+			icon := tmp["icon"].(string)
+
+			icon = strings.Replace(icon, ",", "/", 1)
+			icon = "http://" + Conf.WeedfsAddr + "/" + icon
+
+			i, _ := strconv.Atoi(tmp["status"].(string))
+			tenant := &Tenant{
+				Id:         tenantId,
+				Status:     i,
+				CustomerId: customer_id,
+				Created:    time.Now(),
+				Updated:    time.Now(),
+				Code:       tmp["namespace"].(string), //命名空间为租户code
+				Name:       tmp["name"].(string),
+				NameSpace:  tmp["namespace"].(string),
+				Icon:       icon,
+			}
+			tmpList = append(tmpList, tenant)
+		}
+
+		res["tenantCount"] = len(tmpList)
+		res["tenantList"] = tmpList
 	} else {
 		baseRes.Ret = AuthErr
 		baseRes.ErrMsg = "TenantList is empty"
