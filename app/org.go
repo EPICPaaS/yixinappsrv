@@ -138,9 +138,6 @@ func loginAuth(username, password, tenantId, customer_id string) (loginOk bool, 
 			userMap := login(username, password, customer_id).(map[string]interface{})
 			if nil != userMap {
 
-				//uid := userMap["id"].(string)
-				sessionId = uuid.New()
-				//目前客户端不支持多租户，先取第一个租户为登陆租户
 				/*租户信息（用户属于多个租户）*/
 				tenantList := userMap["tenantList"].([]interface{})
 
@@ -244,8 +241,19 @@ func loginAuth(username, password, tenantId, customer_id string) (loginOk bool, 
 					return false, nil, ""
 				}
 
+				user.UserName = user.Uid + USER_SUFFIX
 				user.Name, _ = userMap["code"].(string)
 				user.NickName, _ = userMap["name"].(string)
+				user.TenantId = tenantId
+
+				py := Pinyin.New()
+				py.Split = ""
+				py.Upper = false
+				p, _ := py.Convert(user.NickName)
+				user.PYInitial = p
+				user.PYQuanPin = p
+				user.Status, _ = userMap["status"].(string)
+
 				user.Password, _ = userMap["pass"].(string)
 				email := userMap["email"]
 				if nil != email {
@@ -261,10 +269,22 @@ func loginAuth(username, password, tenantId, customer_id string) (loginOk bool, 
 					//暂时不同步电话
 					user.Mobile = phone
 				}
-				logger.Infof("用户更新：%v", user)
-				if !updateMember(user) {
-					return false, nil, ""
+
+				exists := isUserExists(user.Uid)
+				if !exists {
+					//新增
+					resFlag := addUser(user)
+					//添加人
+					if resFlag {
+						logger.Info("addUser  successed")
+					}
+				} else {
+					logger.Infof("用户更新：%v", user)
+					if !updateMember(user) {
+						return false, nil, ""
+					}
 				}
+
 				//登录成功
 				user.Avatar = strings.Replace(user.Avatar, ",", "/", 1)
 				user.Avatar = "http://" + Conf.WeedfsAddr + "/" + user.Avatar
@@ -1922,147 +1942,268 @@ func (*device) GetOrgInfo(w http.ResponseWriter, r *http.Request) {
 
 	uid := baseReq["uid"].(string)
 	deviceId := baseReq["deviceID"]
-	userName := args["userName"]
-	password := args["password"]
-
+	customerId := baseReq["customer_id"].(string)
 	// Token 校验
 	token := baseReq["token"].(string)
 	currentUser := getUserByToken(token)
+	logger.Infof("-------[%v]", currentUser)
 	if nil == currentUser {
 		baseRes["ret"] = AuthErr
 		baseRes["errMsg"] = "会话超时请重新登录"
 		return
 	}
 
-	logger.Tracef("Uid [%s], DeviceId [%s], userName [%s], password [%s]",
-		uid, deviceId, userName, password)
-
-	smt, err := db.MySQL.Prepare("select id, name,  parent_id, sort from org where tenant_id=?")
-	if smt != nil {
-		defer smt.Close()
-	} else {
-		return
-	}
-
-	if err != nil {
-		baseRes["errMsg"] = err.Error()
-		baseRes["ret"] = InternalErr
-		return
-	}
-
-	//查询出该租户（组织）的所有部门
-	row, err := smt.Query(currentUser.TenantId)
-	if row != nil {
-		defer row.Close()
-	} else {
-		return
-	}
-	data := members{}
-	for row.Next() {
-		rec := new(member)
-		row.Scan(&rec.Uid, &rec.NickName, &rec.parentId, &rec.Sort)
-		rec.Uid = rec.Uid
-		rec.UserName = rec.Uid + ORG_SUFFIX
-		data = append(data, rec)
-	}
-	err = row.Err()
-	if err != nil {
-		baseRes["errMsg"] = err.Error()
-		baseRes["ret"] = InternalErr
-		return
-	}
-
-	unitMap := map[string]*member{}
-	for _, ele := range data {
-		unitMap[ele.Uid] = ele
-	}
-
-	//构造部门树结构
-	rootList := []*member{}
-	for _, val := range unitMap {
-		if val.parentId == "" {
-			rootList = append(rootList, val)
-		} else {
-			parent := unitMap[val.parentId]
-			if parent == nil {
-				continue
-			}
-			parent.MemberList = append(parent.MemberList, val)
-			parent.MemberCount++
-		}
-	}
+	logger.Infof("Uid [%s], DeviceId [%s], TenantId [%s] ", uid, deviceId, currentUser.TenantId)
+	var respBody map[string]interface{}
 
 	tenant := new(member)
-	res["ognizationMemberList"] = tenant
-	sortMemberList(rootList)
-	tenant.MemberList = rootList
-	tenant.MemberCount = len(rootList)
-	/*获取用户所属租户（单位）信息*/
-	smt, err = db.MySQL.Prepare("select id, code, name from tenant where id=?")
-	if smt != nil {
-		defer smt.Close()
-	} else {
-		baseRes["errMsg"] = err.Error()
-		baseRes["ret"] = InternalErr
-		return
-	}
+	tenant.Uid = currentUser.TenantId
+	//获取租户信息
+	EI := GetExtInterface(customerId, "getTenant")
+
+	logger.Infof("----> %v", EI.HttpUrl+"?id="+currentUser.TenantId)
+	respond, err := http.Get(EI.HttpUrl + "?id=" + currentUser.TenantId)
 
 	if err != nil {
-		baseRes["errMsg"] = err.Error()
-		baseRes["ret"] = InternalErr
+		logger.Error(err)
 		return
 	}
 
-	row, err = smt.Query(currentUser.TenantId)
-	if row != nil {
-		defer row.Close()
-	} else {
-		baseRes["errMsg"] = err.Error()
-		baseRes["ret"] = InternalErr
+	resBodyByte, err := ioutil.ReadAll(respond.Body)
+	defer respond.Body.Close()
+	if err != nil {
+		logger.Error(err)
 		return
 	}
 
-	for row.Next() {
-		row.Scan(&tenant.Uid, &tenant.UserName, &tenant.NickName)
-		tenant.UserName = tenant.Uid + TENANT_SUFFIX
-		break
-	}
-	/*查出用户所属部门*/
-	smt, err = db.MySQL.Prepare("select org_id from org_user where user_id=?")
-	if smt != nil {
-		defer smt.Close()
-	} else {
-		baseRes["errMsg"] = err.Error()
-		baseRes["ret"] = InternalErr
+	if err := json.Unmarshal(resBodyByte, &respBody); err != nil {
+		logger.Errorf("convert to json failed (%s)", err.Error())
 		return
 	}
+	success, ok := respBody["succeed"].(bool)
+
+	if ok && success {
+		tenMap := respBody["data"].(map[string]interface{})
+		tenant.UserName = currentUser.TenantId + TENANT_SUFFIX
+		tenant.NickName = tenMap["name"].(string)
+	}
+
+	//同步租户下的组织机构信息
+	EI = GetExtInterface(customerId, "getDeptAndUserTree")
+	respond, err = http.Get(EI.HttpUrl + "?tenantId=" + currentUser.TenantId)
 
 	if err != nil {
-		baseRes["errMsg"] = err.Error()
-		baseRes["ret"] = InternalErr
+		logger.Error(err)
 		return
 	}
 
-	row, err = smt.Query(currentUser.Uid)
-	if row != nil {
-		defer row.Close()
-	} else {
-		baseRes["errMsg"] = err.Error()
-		baseRes["ret"] = InternalErr
+	resBodyByte, err = ioutil.ReadAll(respond.Body)
+	defer respond.Body.Close()
+	if err != nil {
+		logger.Error(err)
 		return
 	}
 
-	res["userOgnization"] = ""
-	for row.Next() {
-		userOgnization := ""
-		row.Scan(&userOgnization)
-		res["userOgnization"] = userOgnization
-		break
+	if err := json.Unmarshal(resBodyByte, &respBody); err != nil {
+		logger.Errorf("convert to json failed (%s)", err.Error())
+		return
+	}
+	success, ok = respBody["succeed"].(bool)
+
+	if ok && success {
+		orgMapList := respBody["data"].([]interface{})
+
+		logger.Infof("orgMapList [%s] ", orgMapList)
+
+		data := members{}
+		for _, o := range orgMapList {
+			orgMap := o.(map[string]interface{})
+			tpid := orgMap["parentId"].(string)
+			if tpid == "-1" {
+				tpid = ""
+			}
+
+			//org := &org{
+			//	ID:        orgMap["id"].(string),
+			//	Name:      orgMap["name"].(string),
+			//	ShortName: orgMap["name"].(string),
+			//	ParentId:  tpid,
+			//	TenantId:  tenant.Id,
+			//	Location:  orgMap["location"].(string),
+			//}
+
+			rec := new(member)
+			rec.Uid = orgMap["id"].(string)
+			rec.UserName = orgMap["id"].(string) + ORG_SUFFIX
+			rec.Name = orgMap["name"].(string)
+			rec.parentId = tpid
+			rec.TenantId = orgMap["tenantId"].(string)
+			//rec.Sort = orgMap["location"].(string)
+			data = append(data, rec)
+		}
+
+		////构造部门树结构
+		unitMap := map[string]*member{}
+		for _, ele := range data {
+			unitMap[ele.Uid] = ele
+		}
+
+		//构造部门树结构
+		rootList := []*member{}
+		for _, val := range unitMap {
+			if val.parentId == "" {
+				rootList = append(rootList, val)
+			} else {
+				parent := unitMap[val.parentId]
+				if parent == nil {
+					continue
+				}
+				parent.MemberList = append(parent.MemberList, val)
+				parent.MemberCount++
+			}
+		}
+
+		res["ognizationMemberList"] = tenant
+		sortMemberList(rootList)
+		tenant.MemberList = rootList
+		tenant.MemberCount = len(rootList)
+
+		//tx, rerr := db.MySQL.Begin()
+		////添加组织机构
+		//recursionSaveOrUpdateOrg(tx, tenant, orgMapList)
+		//if rerr != nil {
+		//	tx.Rollback()
+		//} else {
+		//	err = tx.Commit()
+		//}
 	}
 
-	starMemberList := getStarUser(currentUser.Uid)
-	res["starMemberCount"] = len(starMemberList)
-	res["starMemberList"] = starMemberList
+	//smt, err := db.MySQL.Prepare("select id, name,  parent_id, sort from org where tenant_id=?")
+	//if smt != nil {
+	//	defer smt.Close()
+	//} else {
+	//	return
+	//}
+
+	//if err != nil {
+	//	baseRes["errMsg"] = err.Error()
+	//	baseRes["ret"] = InternalErr
+	//	return
+	//}
+
+	////查询出该租户（组织）的所有部门
+	//row, err := smt.Query(currentUser.TenantId)
+	//if row != nil {
+	//	defer row.Close()
+	//} else {
+	//	return
+	//}
+	//data := members{}
+	//for row.Next() {
+	//	rec := new(member)
+	//	row.Scan(&rec.Uid, &rec.NickName, &rec.parentId, &rec.Sort)
+	//	rec.Uid = rec.Uid
+	//	rec.UserName = rec.Uid + ORG_SUFFIX
+	//	data = append(data, rec)
+	//}
+	//err = row.Err()
+	//if err != nil {
+	//	baseRes["errMsg"] = err.Error()
+	//	baseRes["ret"] = InternalErr
+	//	return
+	//}
+
+	//unitMap := map[string]*member{}
+	//for _, ele := range data {
+	//	unitMap[ele.Uid] = ele
+	//}
+
+	////构造部门树结构
+	//rootList := []*member{}
+	//for _, val := range unitMap {
+	//	if val.parentId == "" {
+	//		rootList = append(rootList, val)
+	//	} else {
+	//		parent := unitMap[val.parentId]
+	//		if parent == nil {
+	//			continue
+	//		}
+	//		parent.MemberList = append(parent.MemberList, val)
+	//		parent.MemberCount++
+	//	}
+	//}
+
+	//tenant := new(member)
+	//res["ognizationMemberList"] = tenant
+	//sortMemberList(rootList)
+	//tenant.MemberList = rootList
+	//tenant.MemberCount = len(rootList)
+	///*获取用户所属租户（单位）信息*/
+	//smt, err = db.MySQL.Prepare("select id, code, name from tenant where id=?")
+	//if smt != nil {
+	//	defer smt.Close()
+	//} else {
+	//	baseRes["errMsg"] = err.Error()
+	//	baseRes["ret"] = InternalErr
+	//	return
+	//}
+
+	//if err != nil {
+	//	baseRes["errMsg"] = err.Error()
+	//	baseRes["ret"] = InternalErr
+	//	return
+	//}
+
+	//row, err = smt.Query(currentUser.TenantId)
+	//if row != nil {
+	//	defer row.Close()
+	//} else {
+	//	baseRes["errMsg"] = err.Error()
+	//	baseRes["ret"] = InternalErr
+	//	return
+	//}
+
+	//for row.Next() {
+	//	row.Scan(&tenant.Uid, &tenant.UserName, &tenant.NickName)
+	//	tenant.UserName = tenant.Uid + TENANT_SUFFIX
+	//	break
+	//}
+	///*查出用户所属部门*/
+	//smt, err = db.MySQL.Prepare("select org_id from org_user where user_id=?")
+	//if smt != nil {
+	//	defer smt.Close()
+	//} else {
+	//	baseRes["errMsg"] = err.Error()
+	//	baseRes["ret"] = InternalErr
+	//	return
+	//}
+
+	//if err != nil {
+	//	baseRes["errMsg"] = err.Error()
+	//	baseRes["ret"] = InternalErr
+	//	return
+	//}
+
+	//row, err = smt.Query(currentUser.Uid)
+	//if row != nil {
+	//	defer row.Close()
+	//} else {
+	//	baseRes["errMsg"] = err.Error()
+	//	baseRes["ret"] = InternalErr
+	//	return
+	//}
+
+	//res["userOgnization"] = ""
+	//for row.Next() {
+	//	userOgnization := ""
+	//	row.Scan(&userOgnization)
+	//	res["userOgnization"] = userOgnization
+	//	break
+	//}
+
+	//starMemberList := getStarUser(currentUser.Uid)
+	//res["starMemberCount"] = len(starMemberList)
+	//res["starMemberList"] = starMemberList
 }
 
 /*在用户所在租户（单位）搜索用户，根据传入的@searchKey，并支持分页（@offset，@limit）*/
