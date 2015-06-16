@@ -7,6 +7,7 @@ import (
 	//"fmt"
 	"github.com/EPICPaaS/go-uuid/uuid"
 	"github.com/EPICPaaS/yixinappsrv/db"
+	"github.com/l2x/golang-chinese-to-pinyin"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -15,9 +16,14 @@ import (
 
 const (
 	// 根据 id 查询应用记录.
-	SelectApplicationById = "SELECT  * FROM `application` WHERE `id` = ?"
+	SelectApplicationById = "SELECT  `id`,`name`,`token`,`type`,`status`,`sort`,`level`,`avatar`,`created`,`updated`,`name_Py`,`name_quanpin`,`description` ,`follow`  FROM `application` WHERE `id` = ?"
+	//插入应用信息
+	InsertApplication = "INSERT INTO `application`(`id`,`name`,`token`,`type`,`status`,`sort`,`level`,`avatar`,`created`,`updated`,`name_Py`,`name_quanpin`,`description` ,`follow`    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+	//更新用户信息
+	UpdateApplication = "UPDATE  `application`  set  `name` = ?  , `token`=? , `type` = ?  ,`status`=? ,`sort`=? , `level`=?   ,  `avatar` =?  ,  `name_Py`=? ,`name_quanpin` =? , `description` =? , `follow` =?  where id = ? "
 	// 查询应用记录.
-	SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF( isnull(a.follow) ,t.follow,a.follow)  as follow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
+	//SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF( isnull(a.follow) ,t.follow,a.follow)  as follow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
+	SelectAllApplication = "select t.id, t.name, t.name as nickName, t.status, t.sort,t.avatar,t.name_py,t.name_quanpin ,t.description, IF( isnull(a.follow) ,t.follow,a.follow)  as follow from application  t  join  app_user a on t.id = a.appId and a.uid = ? order  by  t.sort "
 	// 根据 token 获取应用记录.
 	SelectApplicationByToken = "SELECT * FROM `application` WHERE `token` = ?"
 	//根据应用ID查询应用操作项列表
@@ -78,9 +84,8 @@ func getApplication(appId string) (*application, error) {
 	application := application{}
 
 	if err := row.Scan(&application.Id, &application.Name, &application.Token, &application.Type, &application.Status,
-		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description, &application.Follow); err != nil {
+		&application.Sort, &application.Level, &application.Avatar, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description, &application.Follow); err != nil {
 		logger.Error(err)
-
 		return nil, err
 	}
 
@@ -92,22 +97,83 @@ func getApplication(appId string) (*application, error) {
 	return &application, nil
 }
 
-func getAllApplication(tenantId, uid string) ([]*member, error) {
-	rows, _ := db.MySQL.Query(SelectAllApplication, tenantId, uid)
+func getAllApplication(customer_id, tenantId, uid string) ([]*member, error) {
+	//改成从数据17yop获取 http://www.17yop.com/yop/phone/login/getRuserApps
+	//参数为   tenantId   ruserId
+	ret := []*member{}
+
+	EI := GetExtInterface(customer_id, "getRuserApps")
+	res, err := http.Get(EI.HttpUrl + "?tenantId=" + tenantId + "&ruuid=" + uid)
+	if err != nil {
+		return ret, nil
+	}
+	resBodyByte, err := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+	if err != nil {
+		return ret, nil
+	}
+	var respBody map[string]interface{}
+	if err := json.Unmarshal(resBodyByte, &respBody); err != nil {
+		return ret, nil
+	}
+	success, ok := respBody["succeed"].(bool)
+	////logger.Infof("结果：%v", respBody)
+
+	if ok && success {
+		//更新Application信息
+		userMapList := respBody["data"].([]interface{})
+		for _, o := range userMapList {
+			appMap := o.(map[string]interface{})
+			app := application{}
+
+			app.Id = appMap["id"].(string)
+			app.Name = appMap["name"].(string)
+			app.Token = appMap["appcode"].(string)
+			app.Type = "app"
+			app.Status = 0
+			app.Sort = 0
+			app.Level = 0
+			app.Avatar = appMap["icon"].(string)
+			app.Description = appMap["content"].(string)
+			app.Created = time.Now()
+			app.Updated = time.Now()
+
+			py := Pinyin.New()
+			py.Split = ""
+			py.Upper = false
+			p, _ := py.Convert(app.Name)
+
+			app.PYInitial = p
+			app.PYQuanPin = p
+			app.Follow = "1"
+
+			insertApp(&app)
+
+			userApp := new(userapp)
+			userApp.Id = uuid.New()
+			userApp.AppId = app.Id
+			userApp.UId = uid
+			userApp.Follow = "1"
+			insertUserApp(userApp)
+		}
+
+	}
+
+	rows, _ := db.MySQL.Query(SelectAllApplication, uid)
 	if rows != nil {
 		defer rows.Close()
 	}
-	ret := []*member{}
+
 	for rows.Next() {
 		rec := member{}
 
-		if err := rows.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Sort, &rec.Avatar, &rec.TenantId, &rec.PYInitial, &rec.PYQuanPin, &rec.Description, &rec.Follow); err != nil {
+		if err := rows.Scan(&rec.Uid, &rec.Name, &rec.NickName, &rec.Status, &rec.Sort, &rec.Avatar, &rec.PYInitial, &rec.PYQuanPin, &rec.Description, &rec.Follow); err != nil {
 			logger.Error(err)
 
 			return nil, err
 		}
 		if len(rec.Avatar) > 0 {
-			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+			//rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
 			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
 		}
 		rec.UserName = rec.Uid + APP_SUFFIX
@@ -205,13 +271,14 @@ func (*device) GetApplicationList(w http.ResponseWriter, r *http.Request) {
 
 	// Token 校验
 	token := baseReq["token"].(string)
+	customer_id := baseReq["customer_id"].(string)
 	user := getUserByToken(token)
 	if nil == user {
 		baseRes.Ret = AuthErr
 		baseRes.ErrMsg = "会话超时请重新登录"
 		return
 	}
-	members, err := getAllApplication(user.TenantId, user.Uid)
+	members, err := getAllApplication(customer_id, user.TenantId, user.Uid)
 	if err != nil {
 		baseRes.ErrMsg = err.Error()
 		baseRes.Ret = InternalErr
@@ -347,7 +414,7 @@ func (*device) UserFollowApp(w http.ResponseWriter, r *http.Request) {
 		body := bytes.NewReader(data)
 		appPush := "http://" + Conf.AppPush[0] + "/app/client/app/user/push"
 		http.Post(appPush, "text/plain;charset=UTF-8", body) //不成功也不管了
-		logger.Infof("%s,%s", Conf.AppPush[0], string(data[:]))
+		////logger.Infof("%s,%s", Conf.AppPush[0], string(data[:]))
 
 		baseRes.Ret = OK
 		baseRes.ErrMsg = "Save app user success"
@@ -480,6 +547,53 @@ func insertUserApp(userApp *userapp) bool {
 			return false
 		}
 		_, err = tx.Exec(UpdateAppUser, userApp.Follow, userapp.Id)
+		if err != nil {
+			logger.Error(err)
+			if err := tx.Rollback(); err != nil {
+				logger.Error(err)
+			}
+			return false
+		}
+
+		if err := tx.Commit(); err != nil {
+			logger.Error(err)
+			return false
+		}
+	}
+	return true
+}
+
+func insertApp(app *application) bool {
+	tapp, _ := getApplication(app.Id)
+
+	if nil == tapp {
+		tx, err := db.MySQL.Begin()
+		if err != nil {
+			logger.Error(err)
+			return false
+		}
+		_, err = tx.Exec(InsertApplication, app.Id, app.Name, app.Token, app.Type, app.Status, app.Sort, app.Level, app.Avatar, app.Created, app.Updated, app.PYInitial, app.PYQuanPin, app.Description, app.Follow)
+		if err != nil {
+			logger.Error(err)
+			if err := tx.Rollback(); err != nil {
+				logger.Error(err)
+			}
+			return false
+		}
+
+		if err := tx.Commit(); err != nil {
+			logger.Error(err)
+			return false
+		}
+	} else {
+		tx, err := db.MySQL.Begin()
+		if err != nil {
+			logger.Error(err)
+			return false
+		}
+		//logger.Infof("app.Name[%v], app.Token[%v], app.Type[%v], app.Status[%v], app.Sort[%v], app.Level[%v], app.Avatar[%v], app.PYInitial[%v],app.PYQuanPin[%v], app.Description[%v],app.Follow[%v], app.Id[%v]", app.Name, app.Token, app.Type, app.Status, app.Sort, app.Level, app.Avatar, app.PYInitial, app.PYQuanPin, app.Description, app.Follow, app.Id)
+
+		_, err = tx.Exec(UpdateApplication, app.Name, app.Token, app.Type, app.Status, app.Sort, app.Level, app.Avatar, app.PYInitial, app.PYQuanPin, app.Description, app.Follow, app.Id)
 		if err != nil {
 			logger.Error(err)
 			if err := tx.Rollback(); err != nil {

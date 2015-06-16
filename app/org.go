@@ -77,7 +77,7 @@ func login(username, password, customer_id string) interface{} {
 	// TODO:ghg
 	EI := GetExtInterface(customer_id, "login")
 
-	//logger.Infof("%s ,%v", customer_id, EI.Owner)
+	////logger.Infof("%s ,%v", customer_id, EI.Owner)
 	if EI != nil {
 		if EI.Owner == 0 { //自己的登录
 			user := getUserAndOrgNameByName(username)
@@ -87,7 +87,7 @@ func login(username, password, customer_id string) interface{} {
 				return nil
 			}
 		} else {
-			//logger.Infof("%s , %s", EI.HttpUrl, username)
+			////logger.Infof("%s , %s", EI.HttpUrl, username)
 			res, err := http.Get(EI.HttpUrl + "?code=" + username + "&pass=" + password)
 			if err != nil {
 				logger.Error(err)
@@ -106,7 +106,7 @@ func login(username, password, customer_id string) interface{} {
 				return nil
 			}
 			success, ok := respBody["succeed"].(bool)
-			logger.Infof("登陆结果：%v", respBody)
+			//logger.Infof("登陆结果：%v", respBody)
 			if ok && success {
 				userMap := respBody["data"].(map[string]interface{})
 				return userMap
@@ -140,96 +140,21 @@ func loginAuth(username, password, tenantId, customer_id string) (loginOk bool, 
 
 				/*租户信息（用户属于多个租户）*/
 				tenantList := userMap["tenantList"].([]interface{})
-
+				uid := userMap["id"].(string)
 				var user *member = &member{}
-
-				//for _, tn := range tenantList {
-				//	tmp := tn.(map[string]interface{})
-				//	logger.Infof("同步租户：%v", tmp)
-
-				//	tenantId := tmp["id"].(string)
-
-				//	if isExistTennat(tenantId) {
-				//		tenantId = getTenantById(tenantId).Id
-				//	}
-
-				//	i, _ := strconv.Atoi(tmp["status"].(string))
-				//	tenant := &Tenant{
-				//		Id:         tenantId,
-				//		Code:       tmp["namespace"].(string), //命名空间为租户code
-				//		Name:       tmp["name"].(string),
-				//		Status:     i,
-				//		CustomerId: customer_id,
-				//		Created:    time.Now(),
-				//		Updated:    time.Now(),
-				//	}
-
-				//	//yop的uids是uid+tenantId取MD5值
-				//	logger.Infof("%s,%s\n", uid, tenantId) // 输出摘要结果
-				//	ret := GetMd5String(uid + tenantId)
-				//	logger.Infof("%s\n", ret) // 输出摘要结果
-
-				//	user = getUserByUid(ret)
-				//	if nil != user {
-				//		orgRet := getOrgListByUserId(user.Uid)
-				//		if len(orgRet) > 0 {
-				//			removeOrgUser(tenant.Id, user.Uid)
-				//			user.OrgName = orgRet[0].Name
-				//		} else {
-				//			user.OrgName = tenant.Name
-				//		}
-				//	} else {
-				//		//用户并没有分配到单位中，直接挂在根下
-				//		uname := userMap["name"].(string)
-				//		py := Pinyin.New()
-				//		py.Split = ""
-				//		py.Upper = false
-				//		p, _ := py.Convert(uname)
-
-				//		userNmae := ret + USER_SUFFIX
-				//		name := userMap["code"].(string)
-
-				//		exists := isUserExists(ret)
-				//		if !exists {
-				//			//新增
-				//			user = &member{
-				//				Uid:       ret,
-				//				UserName:  userNmae,
-				//				Name:      name,
-				//				NickName:  uname,
-				//				PYInitial: p,
-				//				PYQuanPin: p,
-				//				Status:    "1",
-				//				TenantId:  tenantId,
-				//			}
-
-				//			resFlag := addUser(user)
-				//			//添加单位人员关系
-				//			if len(tenantId) > 0 {
-				//				if !isOrgUserExists(tenantId, user.Uid) {
-				//					resFlag = addOrgUser(tenantId, user.Uid)
-				//				}
-				//			}
-				//			if resFlag {
-				//				logger.Info("sysnTenantUser  successed")
-				//			}
-				//		}
-				//		user.OrgName = tenant.Name
-				//	}
-				//	if saveTennat(tenant) {
-				//		//同步租户下的组织机构
-				//		removeTenant(tenant.Id)
-				//		//removeOrgUer(ret)
-				//		go syncRemoteOrg(tenant)
-				//	}
-				//}
 
 				var existTenantFlag string = "0"
 				for _, tn := range tenantList {
 					tmp := tn.(map[string]interface{})
 					tId := tmp["id"].(string)
 					if tId == tenantId {
-						user.Uid, _ = tmp["uuid"].(string)
+						//user.Uid, _ = tmp["uuid"].(string)
+
+						//yop的uids是uid+tenantId取MD5值
+						//logger.Infof("%s,%s\n", uid, tenantId) // 输出摘要结果
+						user.Uid = GetMd5String(uid + tenantId)
+						//logger.Infof("%s\n", user.Uid) // 输出摘要结果
+
 						user.TenantId = tenantId
 						existTenantFlag = "1"
 					}
@@ -237,7 +162,7 @@ func loginAuth(username, password, tenantId, customer_id string) (loginOk bool, 
 				}
 
 				if existTenantFlag == "0" {
-					logger.Infof("当前用户不在 TenantId [%s] 租户下 ", tenantId)
+					//logger.Infof("当前用户不在 TenantId [%s] 租户下 ", tenantId)
 					return false, nil, ""
 				}
 
@@ -279,14 +204,14 @@ func loginAuth(username, password, tenantId, customer_id string) (loginOk bool, 
 						logger.Info("addUser  successed")
 					}
 				} else {
-					logger.Infof("用户更新：%v", user)
+					//logger.Infof("用户更新：%v", user)
 					if !updateMember(user) {
 						return false, nil, ""
 					}
 				}
 
 				//登录成功
-				user.Avatar = strings.Replace(user.Avatar, ",", "/", 1)
+				//user.Avatar = strings.Replace(user.Avatar, ",", "/", 1)
 				user.Avatar = "http://" + Conf.WeedfsAddr + "/" + user.Avatar
 				return true, user, sessionId
 			} else {
@@ -361,7 +286,7 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 			TenantId:  tenant.Id,
 			Location:  orgMap["location"].(string),
 		}
-		logger.Infof("同步机构：%v", org)
+		//logger.Infof("同步机构：%v", org)
 		/**exists, parentId := isExists(org.ID)
 		if exists && parentId == org.ParentId {
 			updateOrg(org, tx)
@@ -398,7 +323,7 @@ func recursionSaveOrUpdateOrg(tx *sql.Tx, tenant *Tenant, orgMapList []interface
 				email, _ := memberMap["email"].(string)
 				icon, _ := memberMap["icon"].(string)
 
-				logger.Infof("同步用户%v", memberMap)
+				//logger.Infof("同步用户%v", memberMap)
 				exists := isUserExists(uid)
 				var m *member
 
@@ -474,7 +399,7 @@ func getUserAndOrgNameByUid(uid string) *member {
 		return nil
 	} else {
 		if len(rec.Avatar) > 0 {
-			rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
+			//rec.Avatar = strings.Replace(rec.Avatar, ",", "/", 1)
 			rec.Avatar = "http://" + Conf.WeedfsAddr + "/" + rec.Avatar
 		}
 		rec.UserName = rec.Uid + USER_SUFFIX
@@ -633,6 +558,7 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 
 	// Token 校验
 	token := baseReq["token"].(string)
+	customer_id := baseReq["customer_id"].(string)
 	user := getUserByToken(token)
 	if nil == user {
 		baseRes.Ret = AuthErr
@@ -642,14 +568,129 @@ func (*device) GetMemberByUserName(w http.ResponseWriter, r *http.Request) {
 	userName := args["userName"].(string)
 	uid := userName[:strings.LastIndex(userName, "@")]
 
-	var toUser *member
+	var toUser = new(member)
 	if strings.HasSuffix(userName, USER_SUFFIX) { //用户
 
-		toUser = getUserAndOrgNameByUid(uid)
+		//toUser = getUserAndOrgNameByUid(uid)
+		//http://www.17yop.com/yop/phone/login/getDeptUser 接口获取
+
+		// TODO:ghg
+		EI := GetExtInterface(customer_id, "getUserDeptInfo")
+		res, err := http.Get(EI.HttpUrl + "?ruuid=" + uid)
+		if err != nil {
+			logger.Error(err)
+			baseRes.ErrMsg = err.Error()
+			baseRes.Ret = ParamErr
+			return
+		}
+
+		resBodyByte, err := ioutil.ReadAll(res.Body)
+		defer res.Body.Close()
+		if err != nil {
+			logger.Error(err)
+			baseRes.ErrMsg = err.Error()
+			baseRes.Ret = ParamErr
+			return
+		}
+		var respBody map[string]interface{}
+		if err := json.Unmarshal(resBodyByte, &respBody); err != nil {
+			logger.Errorf("convert to json failed (%s)", err.Error())
+			baseRes.ErrMsg = err.Error()
+			baseRes.Ret = ParamErr
+			return
+		}
+		success, ok := respBody["succeed"].(bool)
+		//logger.Infof("结果：%v", respBody)
+
+		if ok && success {
+
+			userMap := respBody["data"].(map[string]interface{})
+			orgMap := userMap["departAO"].(map[string]interface{})
+
+			toUser.Uid = userMap["id"].(string)
+			toUser.UserName = toUser.Uid + USER_SUFFIX
+			toUser.Name, _ = userMap["code"].(string)
+			toUser.NickName, _ = userMap["name"].(string)
+			toUser.OrgName = orgMap["name"].(string)
+
+			py := Pinyin.New()
+			py.Split = ""
+			py.Upper = false
+			p, _ := py.Convert(user.NickName)
+			toUser.PYInitial = p
+			toUser.PYQuanPin = p
+			toUser.Status, _ = userMap["status"].(string)
+
+			email := userMap["email"]
+			if nil != email {
+				toUser.Email = email.(string)
+			}
+			icon, _ := userMap["icon"]
+			if nil != icon {
+				toUser.Avatar = icon.(string)
+			}
+			phone, ok := userMap["phone"].(string)
+
+			if ok && len(phone) > 0 {
+				//暂时不同步电话
+				user.Mobile = phone
+			}
+
+			if len(toUser.Avatar) > 0 {
+				//user.Avatar = strings.Replace(user.Avatar, ",", "/", 1)
+				toUser.Avatar = "http://" + Conf.WeedfsAddr + "/" + toUser.Avatar
+			}
+
+		}
 
 	} else if strings.HasSuffix(userName, APP_SUFFIX) { //应用
 
 		app, err := getApplication(uid)
+
+		//http://www.17yop.com/yop/phone/login/getApp 接口获取
+
+		// TODO:ghg
+		/**
+		EI := GetExtInterface(customer_id, "getApp")
+		res, err := http.Get(EI.HttpUrl + "?appId=" + uid)
+		if err != nil {
+			logger.Error(err)
+			baseRes.ErrMsg = err.Error()
+			baseRes.Ret = ParamErr
+			return
+		}
+
+		resBodyByte, err := ioutil.ReadAll(res.Body)
+		defer res.Body.Close()
+		if err != nil {
+			logger.Error(err)
+			baseRes.ErrMsg = err.Error()
+			baseRes.Ret = ParamErr
+			return
+		}
+		var respBody map[string]interface{}
+		if err := json.Unmarshal(resBodyByte, &respBody); err != nil {
+			logger.Errorf("convert to json failed (%s)", err.Error())
+			baseRes.ErrMsg = err.Error()
+			baseRes.Ret = ParamErr
+			return
+		}
+		success, ok := respBody["succeed"].(bool)
+		//logger.Infof("登陆结果：%v", respBody)
+
+		app := new(application)
+		if ok && success {
+			//不用ID，用appcode作为应用ID
+			app.Id = respBody["code"].(string)
+			app.Token = respBody["code"].(string)
+			app.Avatar = respBody["icon"].(string)
+			app.Name = respBody["name"].(string)
+			app.Description = respBody["content"].(string)
+			//app.Status = respBody["status"].(string)
+			app.Follow = "1"
+		}
+		**/
+
 		if err != nil || app == nil {
 			baseRes.ErrMsg = err.Error()
 			baseRes.Ret = ParamErr
@@ -814,8 +855,7 @@ func (*device) LoginOut(w http.ResponseWriter, r *http.Request) {
 	customer_id := baseReq["customer_id"].(string)
 	deviceType := baseReq["deviceType"].(string)
 
-	logger.Infof("uid [%s], deviceId [%s], deviceType [%s], token [%s], customer_id [%s]",
-		uid, deviceId, deviceType, token, customer_id)
+	logger.Infof("uid [%s], deviceId [%s], deviceType [%s], token [%s], customer_id [%s]", uid, deviceId, deviceType, token, customer_id)
 	_, err = removeToken(token)
 	if nil != err {
 		logger.Error(err)
@@ -964,7 +1004,82 @@ func getTenantUserListByTenantId(id, currentId string) members {
 	return ret
 }
 
-/*获取单位的人员信息*/
+/*根据单位id（orgId）获取成员*/
+func getUserListInYOPByOrgId(customer_id, orgId string) members {
+
+	// TODO:ghg
+	EI := GetExtInterface(customer_id, "getDeptUser")
+
+	res, err := http.Get(EI.HttpUrl + "?deptId=" + orgId)
+	if err != nil {
+		logger.Error(err)
+		return nil
+	}
+
+	resBodyByte, err := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+	if err != nil {
+		logger.Error(err)
+		return nil
+	}
+	var respBody map[string]interface{}
+	if err := json.Unmarshal(resBodyByte, &respBody); err != nil {
+		logger.Errorf("convert to json failed (%s)", err.Error())
+		return nil
+	}
+	success, ok := respBody["succeed"].(bool)
+	//logger.Infof("登陆结果：%v", respBody)
+
+	ret := members{}
+	if ok && success {
+		userMapList := respBody["data"].([]interface{})
+
+		for _, o := range userMapList {
+			userMap := o.(map[string]interface{})
+			user := new(member)
+
+			user.Uid = userMap["id"].(string)
+			user.UserName = user.Uid + USER_SUFFIX
+			user.Name, _ = userMap["code"].(string)
+			user.NickName, _ = userMap["name"].(string)
+
+			py := Pinyin.New()
+			py.Split = ""
+			py.Upper = false
+			p, _ := py.Convert(user.NickName)
+			user.PYInitial = p
+			user.PYQuanPin = p
+			user.Status, _ = userMap["status"].(string)
+
+			user.Password, _ = userMap["pass"].(string)
+			email := userMap["email"]
+			if nil != email {
+				user.Email = email.(string)
+			}
+			icon, _ := userMap["icon"]
+			if nil != icon {
+				user.Avatar = icon.(string)
+			}
+			phone, ok := userMap["phone"].(string)
+
+			if ok && len(phone) > 0 {
+				//暂时不同步电话
+				user.Mobile = phone
+			}
+
+			if len(user.Avatar) > 0 {
+				//user.Avatar = strings.Replace(user.Avatar, ",", "/", 1)
+				user.Avatar = "http://" + Conf.WeedfsAddr + "/" + user.Avatar
+			}
+			ret = append(ret, user)
+
+		}
+	}
+
+	return ret
+}
+
+/*获取单位的人员信息,调用17yop的接口*/
 func (*device) GetOrgUserList(w http.ResponseWriter, r *http.Request) {
 
 	baseRes := baseResponse{OK, ""}
@@ -991,6 +1106,7 @@ func (*device) GetOrgUserList(w http.ResponseWriter, r *http.Request) {
 
 	// Token 校验
 	token := baseReq["token"].(string)
+	customer_id := baseReq["customer_id"].(string)
 	user := getUserByToken(token)
 	if nil == user {
 		baseRes.Ret = AuthErr
@@ -998,11 +1114,10 @@ func (*device) GetOrgUserList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orgId := input["orgid"].(string)
-	memberList := getUserListByOrgId(orgId, user.Uid)
-	if len(memberList) == 0 { //用户未分配组织，直接在租户下
-		logger.Infof("%v ,%v", orgId, user.Uid)
-		memberList = getTenantUserListByTenantId(orgId, user.Uid)
-	}
+	//memberList := getUserListByOrgId(orgId, user.Uid)
+	//修改为调用17yop接口
+	memberList := getUserListInYOPByOrgId(customer_id, orgId)
+
 	res["memberCount"] = len(memberList)
 	res["memberList"] = memberList
 }
@@ -1946,7 +2061,7 @@ func (*device) GetOrgInfo(w http.ResponseWriter, r *http.Request) {
 	// Token 校验
 	token := baseReq["token"].(string)
 	currentUser := getUserByToken(token)
-	logger.Infof("-------[%v]", currentUser)
+	////logger.Infof("-------[%v]", currentUser)
 	if nil == currentUser {
 		baseRes["ret"] = AuthErr
 		baseRes["errMsg"] = "会话超时请重新登录"
@@ -1961,7 +2076,7 @@ func (*device) GetOrgInfo(w http.ResponseWriter, r *http.Request) {
 	//获取租户信息
 	EI := GetExtInterface(customerId, "getTenant")
 
-	logger.Infof("----> %v", EI.HttpUrl+"?id="+currentUser.TenantId)
+	////logger.Infof("----> %v", EI.HttpUrl+"?id="+currentUser.TenantId)
 	respond, err := http.Get(EI.HttpUrl + "?id=" + currentUser.TenantId)
 
 	if err != nil {
@@ -2013,39 +2128,22 @@ func (*device) GetOrgInfo(w http.ResponseWriter, r *http.Request) {
 	if ok && success {
 		orgMapList := respBody["data"].([]interface{})
 
-		logger.Infof("orgMapList [%s] ", orgMapList)
+		////logger.Infof("orgMapList [%s] ", orgMapList)
+
+		//当前用户所在部门，先取租户ID 后面再改
+		res["userOgnization"] = recursionTenantUser(currentUser, orgMapList)
 
 		data := members{}
 		for _, o := range orgMapList {
 			orgMap := o.(map[string]interface{})
-			tpid := orgMap["parentId"].(string)
-			if tpid == "-1" {
-				tpid = ""
-			}
-
-			//org := &org{
-			//	ID:        orgMap["id"].(string),
-			//	Name:      orgMap["name"].(string),
-			//	ShortName: orgMap["name"].(string),
-			//	ParentId:  tpid,
-			//	TenantId:  tenant.Id,
-			//	Location:  orgMap["location"].(string),
-			//}
-
-			rec := new(member)
-			rec.Uid = orgMap["id"].(string)
-			rec.UserName = orgMap["id"].(string) + ORG_SUFFIX
-			rec.Name = orgMap["name"].(string)
-			rec.parentId = tpid
-			rec.TenantId = orgMap["tenantId"].(string)
-			//rec.Sort = orgMap["location"].(string)
-			data = append(data, rec)
+			data = append(data, recursionTenant(orgMap))
 		}
 
 		////构造部门树结构
 		unitMap := map[string]*member{}
 		for _, ele := range data {
 			unitMap[ele.Uid] = ele
+			////logger.Infof("----->ele[ %v]", ele)
 		}
 
 		//构造部门树结构
@@ -2068,142 +2166,75 @@ func (*device) GetOrgInfo(w http.ResponseWriter, r *http.Request) {
 		tenant.MemberList = rootList
 		tenant.MemberCount = len(rootList)
 
-		//tx, rerr := db.MySQL.Begin()
-		////添加组织机构
-		//recursionSaveOrUpdateOrg(tx, tenant, orgMapList)
-		//if rerr != nil {
-		//	tx.Rollback()
-		//} else {
-		//	err = tx.Commit()
-		//}
+	}
+	starMemberList := getStarUser(currentUser.Uid)
+	res["starMemberCount"] = len(starMemberList)
+	res["starMemberList"] = starMemberList
+}
+
+//根据17yop循环出树机构
+func recursionTenant(orgMap map[string]interface{}) *member {
+	rec := new(member)
+	data := members{}
+
+	tpid := orgMap["parentId"].(string)
+	if tpid == "-1" {
+		tpid = ""
 	}
 
-	//smt, err := db.MySQL.Prepare("select id, name,  parent_id, sort from org where tenant_id=?")
-	//if smt != nil {
-	//	defer smt.Close()
-	//} else {
-	//	return
-	//}
+	rec.Uid = orgMap["id"].(string)
+	rec.UserName = orgMap["id"].(string) + ORG_SUFFIX
+	rec.Name = orgMap["name"].(string)
+	rec.NickName = orgMap["name"].(string)
+	rec.parentId = tpid
+	rec.TenantId = orgMap["tenantId"].(string)
+	////logger.Infof("Name[%s]", rec.Name)
 
-	//if err != nil {
-	//	baseRes["errMsg"] = err.Error()
-	//	baseRes["ret"] = InternalErr
-	//	return
-	//}
+	childList := []*member{}
+	//查看当前部门下有无子单位部门
+	chirldrenOrgMapList := orgMap["chirldren"]
+	////logger.Infof("chirldrenOrgMapList[%v]", chirldrenOrgMapList)
+	if nil != chirldrenOrgMapList {
+		for _, o := range chirldrenOrgMapList.([]interface{}) {
+			orgMap := o.(map[string]interface{})
 
-	////查询出该租户（组织）的所有部门
-	//row, err := smt.Query(currentUser.TenantId)
-	//if row != nil {
-	//	defer row.Close()
-	//} else {
-	//	return
-	//}
-	//data := members{}
-	//for row.Next() {
-	//	rec := new(member)
-	//	row.Scan(&rec.Uid, &rec.NickName, &rec.parentId, &rec.Sort)
-	//	rec.Uid = rec.Uid
-	//	rec.UserName = rec.Uid + ORG_SUFFIX
-	//	data = append(data, rec)
-	//}
-	//err = row.Err()
-	//if err != nil {
-	//	baseRes["errMsg"] = err.Error()
-	//	baseRes["ret"] = InternalErr
-	//	return
-	//}
+			val := recursionTenant(orgMap)
+			childList = append(childList, val)
+		}
+		rec.MemberList = childList
+		rec.MemberCount = len(childList)
+	}
 
-	//unitMap := map[string]*member{}
-	//for _, ele := range data {
-	//	unitMap[ele.Uid] = ele
-	//}
+	data = append(data, rec)
+	return rec
+}
 
-	////构造部门树结构
-	//rootList := []*member{}
-	//for _, val := range unitMap {
-	//	if val.parentId == "" {
-	//		rootList = append(rootList, val)
-	//	} else {
-	//		parent := unitMap[val.parentId]
-	//		if parent == nil {
-	//			continue
-	//		}
-	//		parent.MemberList = append(parent.MemberList, val)
-	//		parent.MemberCount++
-	//	}
-	//}
+//根据17yop循环出树机构
+func recursionTenantUser(currentUser *member, orgMapList []interface{}) string {
+	userOgnization := currentUser.TenantId
 
-	//tenant := new(member)
-	//res["ognizationMemberList"] = tenant
-	//sortMemberList(rootList)
-	//tenant.MemberList = rootList
-	//tenant.MemberCount = len(rootList)
-	///*获取用户所属租户（单位）信息*/
-	//smt, err = db.MySQL.Prepare("select id, code, name from tenant where id=?")
-	//if smt != nil {
-	//	defer smt.Close()
-	//} else {
-	//	baseRes["errMsg"] = err.Error()
-	//	baseRes["ret"] = InternalErr
-	//	return
-	//}
+	for _, o := range orgMapList {
+		orgMap := o.(map[string]interface{})
+		rec := new(member)
+		rec.Uid = orgMap["id"].(string)
 
-	//if err != nil {
-	//	baseRes["errMsg"] = err.Error()
-	//	baseRes["ret"] = InternalErr
-	//	return
-	//}
+		//机构下的用户 ,找出当前用户在那个单位部门下
+		userMapList := orgMap["rusers"]
+		if nil != userMapList {
+			for _, u := range userMapList.([]interface{}) {
+				memberMap := u.(map[string]interface{})
+				id := memberMap["id"].(string)
+				//logger.Infof("currentUser.Uid[%v] ,uid[%v]", currentUser.Uid, id)
+				if id == currentUser.Uid {
+					userOgnization = rec.Uid
+					return userOgnization
+				}
+			}
+		}
 
-	//row, err = smt.Query(currentUser.TenantId)
-	//if row != nil {
-	//	defer row.Close()
-	//} else {
-	//	baseRes["errMsg"] = err.Error()
-	//	baseRes["ret"] = InternalErr
-	//	return
-	//}
+	}
 
-	//for row.Next() {
-	//	row.Scan(&tenant.Uid, &tenant.UserName, &tenant.NickName)
-	//	tenant.UserName = tenant.Uid + TENANT_SUFFIX
-	//	break
-	//}
-	///*查出用户所属部门*/
-	//smt, err = db.MySQL.Prepare("select org_id from org_user where user_id=?")
-	//if smt != nil {
-	//	defer smt.Close()
-	//} else {
-	//	baseRes["errMsg"] = err.Error()
-	//	baseRes["ret"] = InternalErr
-	//	return
-	//}
-
-	//if err != nil {
-	//	baseRes["errMsg"] = err.Error()
-	//	baseRes["ret"] = InternalErr
-	//	return
-	//}
-
-	//row, err = smt.Query(currentUser.Uid)
-	//if row != nil {
-	//	defer row.Close()
-	//} else {
-	//	baseRes["errMsg"] = err.Error()
-	//	baseRes["ret"] = InternalErr
-	//	return
-	//}
-
-	//res["userOgnization"] = ""
-	//for row.Next() {
-	//	userOgnization := ""
-	//	row.Scan(&userOgnization)
-	//	res["userOgnization"] = userOgnization
-	//	break
-	//}
-
-	//starMemberList := getStarUser(currentUser.Uid)
-	//res["starMemberCount"] = len(starMemberList)
-	//res["starMemberList"] = starMemberList
+	return userOgnization
 }
 
 /*在用户所在租户（单位）搜索用户，根据传入的@searchKey，并支持分页（@offset，@limit）*/
@@ -2549,7 +2580,7 @@ func (*app) UserAuth(w http.ResponseWriter, r *http.Request) {
 	uid := args["uid"].(string)
 	//用户校验
 	mem := getUserByToken(token)
-	logger.Infof("%v", mem)
+	//logger.Infof("%v", mem)
 	if nil == mem {
 		baseRes.Ret = AuthErr
 		baseRes.ErrMsg = "auth failure"
