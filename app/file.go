@@ -178,11 +178,12 @@ func (*device) GetUserAvatar(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(userName, USER_SUFFIX) { //用户头像
 
 		u := getUserByUid(uid)
+
 		if u == nil || len(u.Avatar) == 0 {
 			w.Write([]byte("not avatar"))
 			return
 		}
-		u.Avatar = strings.Replace(u.Avatar, ",", "/", 1)
+		//u.Avatar = strings.Replace(u.Avatar, ",", "/", 1)
 		addr = "http://" + Conf.WeedfsAddr + "/" + u.Avatar + "?width=" + width + "&height=" + height
 
 	} else if strings.HasSuffix(userName, APP_SUFFIX) { //应用头像
@@ -254,8 +255,8 @@ func (*device) SetUserAvatar(w http.ResponseWriter, r *http.Request) {
 	userName := args["userName"].(string)
 
 	fileId := responseUpload["fid"].(string)
-	fileSuffix := args["fileExtention"].(string)
-	if !saveAvatar(userName, fileId+"/."+fileSuffix) {
+	//fileSuffix := args["fileExtention"].(string)
+	if !saveAvatar(userName, fileId) {
 		baseRes.Ret = InternalErr
 		return
 	}

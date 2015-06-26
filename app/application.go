@@ -10,6 +10,7 @@ import (
 	"github.com/l2x/golang-chinese-to-pinyin"
 	"io/ioutil"
 	"net/http"
+	//"strconv"
 	"strings"
 	"time"
 )
@@ -25,7 +26,7 @@ const (
 	//SelectAllApplication = "select t.id, t.name, t.name, t.status, t.sort,t.avatar, t.tenant_id,t.name_py,t.name_quanpin ,t.description, IF( isnull(a.follow) ,t.follow,a.follow)  as follow from (SELECT * from application  where tenant_id = ? ) t left join  app_user a on t.id = a.appId and a.uid = ? "
 	SelectAllApplication = "select t.id, t.name, t.name as nickName, t.status, t.sort,t.avatar,t.name_py,t.name_quanpin ,t.description, IF( isnull(a.follow) ,t.follow,a.follow)  as follow from application  t  join  app_user a on t.id = a.appId and a.uid = ? order  by  t.sort "
 	// 根据 token 获取应用记录.
-	SelectApplicationByToken = "SELECT * FROM `application` WHERE `token` = ?"
+	SelectApplicationByToken = " SELECT  `id`,`name`,`token`,`type`,`status`,`sort`,`level`,`avatar`,`created`,`updated`,`name_Py`,`name_quanpin`,`description` ,`follow`  FROM `application`  WHERE `token` = ?"
 	//根据应用ID查询应用操作项列表
 	SelectAppOpertionByAppId = "SELECT  `id`, `app_id`, `content`,`action`, `operation_type`,`sort`   FROM `operation` WHERE `app_id` = ?  and  parent_id  is  null  order by  sort "
 	//根据操作项父ID查询应用操作项列表
@@ -40,15 +41,15 @@ const (
 
 // 应用结构.
 type application struct {
-	Id          string    `json:"id"`
-	Name        string    `json:"name"`
-	Token       string    `json:"token"`
-	Type        string    `json:"type"`
-	Status      int       `json:"status"`
-	Sort        int       `json:"sort"`
-	Level       int       `json:"level"`
-	Avatar      string    `json:"avatar"`
-	TenantId    string    `json:"tenantId"`
+	Id     string `json:"id"`
+	Name   string `json:"name"`
+	Token  string `json:"token"`
+	Type   string `json:"type"`
+	Status int    `json:"status"`
+	Sort   int    `json:"sort"`
+	Level  int    `json:"level"`
+	Avatar string `json:"avatar"`
+	//TenantId    string    `json:"tenantId"`
 	Created     time.Time `json:"created"`
 	Updated     time.Time `json:"updated"`
 	PYInitial   string    `json:"pYInitial"`
@@ -120,6 +121,9 @@ func getAllApplication(customer_id, tenantId, uid string) ([]*member, error) {
 	////logger.Infof("结果：%v", respBody)
 
 	if ok && success {
+
+		userAppList := []*userapp{}
+
 		//更新Application信息
 		userMapList := respBody["data"].([]interface{})
 		for _, o := range userMapList {
@@ -131,7 +135,7 @@ func getAllApplication(customer_id, tenantId, uid string) ([]*member, error) {
 			app.Token = appMap["appcode"].(string)
 			app.Type = "app"
 			app.Status = 0
-			app.Sort = 0
+			app.Sort = int(appMap["skuId"].(float64))
 			app.Level = 0
 			app.Avatar = appMap["icon"].(string)
 			app.Description = appMap["content"].(string)
@@ -154,9 +158,11 @@ func getAllApplication(customer_id, tenantId, uid string) ([]*member, error) {
 			userApp.AppId = app.Id
 			userApp.UId = uid
 			userApp.Follow = "1"
-			insertUserApp(userApp)
+
+			userAppList = append(userAppList, userApp)
 		}
 
+		insertUserApps(userAppList, uid)
 	}
 
 	rows, _ := db.MySQL.Query(SelectAllApplication, uid)
@@ -227,7 +233,7 @@ func getApplicationByToken(token string) (*application, error) {
 	application := application{}
 
 	if err := row.Scan(&application.Id, &application.Name, &application.Token, &application.Type, &application.Status,
-		&application.Sort, &application.Level, &application.Avatar, &application.TenantId, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description, &application.Follow); err != nil {
+		&application.Sort, &application.Level, &application.Avatar, &application.Created, &application.Updated, &application.PYInitial, &application.PYQuanPin, &application.Description, &application.Follow); err != nil {
 		logger.Error(err)
 
 		return nil, err
@@ -406,6 +412,7 @@ func (*device) UserFollowApp(w http.ResponseWriter, r *http.Request) {
 		data := []byte(`{
 				"baseRequest":{"token":"` + application.Token + `"},
 				"msgType":103 ,
+				"statusId":"",
 				"content":"感谢你关注了` + application.Name + `" ,
 				"toUserNames":["` + user.Uid + USER_SUFFIX + `"],
 				"objectContent":{"appId":"` + appId + `" , "content":"非常感谢你关注了` + application.Name + `"},
@@ -486,6 +493,7 @@ func (*device) UserUnFollowApp(w http.ResponseWriter, r *http.Request) {
 		data := []byte(`{
 						"baseRequest":{"token":"` + application.Token + `"},
 						"msgType":104 ,
+						"statusId":"",
 						"content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用" ,
 						"toUserNames":["` + user.Uid + USER_SUFFIX + `"],
 						"objectContent":{"appId":"` + appId + `" , "content":"非常感谢你对` + application.Name + `的关注，欢迎下次继续使用"}
@@ -517,6 +525,70 @@ func getUserApp(appId, uid string) (*userapp, error) {
 	}
 
 	return &userapp, nil
+}
+
+//批量
+func insertUserApps(userAppList []*userapp, uid string) bool {
+
+	userTmpAppList := []*userapp{}
+	userExistAppList := []*userapp{}
+
+	//过滤已经存在的
+	for _, userApp := range userAppList {
+		uap, _ := getUserApp(userApp.AppId, userApp.UId)
+		if nil == uap {
+			userTmpAppList = append(userTmpAppList, userApp)
+		} else {
+			userExistAppList = append(userExistAppList, uap)
+		}
+	}
+
+	tx, err := db.MySQL.Begin()
+	if err != nil {
+		logger.Error(err)
+		return false
+	}
+
+	stmt, err := tx.Prepare("delete  from `app_user` where  `uid`= ? ")
+	if _, err = stmt.Exec(uid); err != nil {
+		logger.Error(err)
+	}
+
+	stmt, err = tx.Prepare(`INSERT INTO app_user(id,appid,uid,follow) VALUES(?,?,?,?) `)
+	for _, userApp := range userTmpAppList {
+		if _, err = stmt.Exec(uuid.New(), userApp.AppId, userApp.UId, userApp.Follow); err != nil {
+			logger.Error(err)
+		}
+
+	}
+
+	stmt, err = tx.Prepare(`INSERT INTO app_user(id,appid,uid,follow) VALUES(?,?,?,?) `)
+	for _, userApp := range userExistAppList {
+		if _, err = stmt.Exec(userApp.Id, userApp.AppId, userApp.UId, userApp.Follow); err != nil {
+			logger.Error(err)
+		}
+	}
+
+	if err != nil {
+		logger.Error(err)
+		if err := tx.Rollback(); err != nil {
+			logger.Error(err)
+		}
+		return false
+	}
+
+	defer func() {
+		if err = stmt.Close(); err != nil {
+			logger.Error(err)
+		}
+	}()
+
+	if err := tx.Commit(); err != nil {
+		logger.Error(err)
+		return false
+	}
+
+	return true
 }
 
 func insertUserApp(userApp *userapp) bool {
