@@ -229,7 +229,6 @@ func getAppOpertionListByAppId(appId string) ([]*operation, error) {
 // 根据 token 查询应用记录.
 func getApplicationByToken(token string) (*application, error) {
 	row := db.MySQL.QueryRow(SelectApplicationByToken, token)
-
 	application := application{}
 
 	if err := row.Scan(&application.Id, &application.Name, &application.Token, &application.Type, &application.Status,
